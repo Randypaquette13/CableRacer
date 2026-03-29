@@ -13,6 +13,7 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create(data: GameOverData): void {
+    document.body.style.cursor = '';
     const { width, height } = this.scale;
     this.add.rectangle(width * 0.5, height * 0.5, width, height, 0x170b0b);
 

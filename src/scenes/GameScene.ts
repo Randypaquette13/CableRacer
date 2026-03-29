@@ -30,6 +30,10 @@ const CAR_RADIUS = 18;
 const BASE_SPEED = 300;
 const MAX_SPEED = 430;
 const ACCEL = 28;
+/** Distance (m) at which speed ramp starts; below this, multiplier is 1.0 */
+const DISTANCE_SPEED_RAMP_START = 3000;
+/** Distance (m) at which speed ramp ends; at and above this, multiplier is 1.5 */
+const DISTANCE_SPEED_RAMP_END = 100000;
 const HOOK_RANGE = 1400;
 /** Cable extends toward the wall at this speed (px/s); fast but not instant */
 const CABLE_SHOOT_SPEED = 1800;
@@ -71,6 +75,10 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super(SCENES.game);
+  }
+
+  shutdown(): void {
+    document.body.style.cursor = '';
   }
 
   preload(): void {
@@ -116,6 +124,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bindGameplayKeys();
     this.input.mouse?.disableContextMenu();
+    document.body.style.cursor = 'none';
     this.input.off('pointerdown', this.onPointerDown, this);
     this.input.on('pointerdown', this.onPointerDown, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -179,7 +188,7 @@ export class GameScene extends Phaser.Scene {
       this.updateHookedMotion(dt);
     } else {
       const forward = new Phaser.Math.Vector2(Math.cos(this.carHeading), Math.sin(this.carHeading));
-      this.carPosition.add(forward.scale(this.speed * dt));
+      this.carPosition.add(forward.scale(this.getEffectiveSpeed() * dt));
       if (this.hook?.extending) {
         this.updateCableExtending(dt);
       }
@@ -372,11 +381,22 @@ export class GameScene extends Phaser.Scene {
     this.hook = null;
   }
 
+  private getDistanceSpeedMultiplier(): number {
+    if (this.distance <= DISTANCE_SPEED_RAMP_START) return 1;
+    if (this.distance >= DISTANCE_SPEED_RAMP_END) return 1.5;
+    const t = (this.distance - DISTANCE_SPEED_RAMP_START) / (DISTANCE_SPEED_RAMP_END - DISTANCE_SPEED_RAMP_START);
+    return 1 + t * 0.5;
+  }
+
+  private getEffectiveSpeed(): number {
+    return this.speed * this.getDistanceSpeedMultiplier();
+  }
+
   private updateHookedMotion(dt: number): void {
     if (!this.hook) {
       return;
     }
-    const rawOmega = this.speed / Math.max(this.hook.radius, 40);
+    const rawOmega = this.getEffectiveSpeed() / Math.max(this.hook.radius, 40);
     const omega = Math.min(rawOmega, MAX_HOOK_OMEGA) * this.hook.angularSign;
     this.hook.angle += omega * dt;
     this.carPosition.set(

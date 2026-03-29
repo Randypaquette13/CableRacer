@@ -1,5 +1,8 @@
 import { CAR_SKINS, MAP_THEMES, STORAGE_KEY, type CarSkinId, type ThemeId } from './config';
 
+/** Set to true to reset high score once on next load, then set back to false. */
+const RESET_HIGHSCORE_ONCE = false;
+
 type SaveData = {
   highScoreDistance: number;
   walletCoins: number;
@@ -21,7 +24,14 @@ const defaultSave: SaveData = {
 };
 
 export class ProgressionService {
-  private static saveData: SaveData = ProgressionService.load();
+  private static saveData: SaveData = (() => {
+    const loaded = ProgressionService.load();
+    if (RESET_HIGHSCORE_ONCE) {
+      loaded.highScoreDistance = 0;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+    }
+    return loaded;
+  })();
 
   static get data(): SaveData {
     return structuredClone(ProgressionService.saveData);

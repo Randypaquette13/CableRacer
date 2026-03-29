@@ -29,14 +29,25 @@ export class MainMenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.createButton(width * 0.5, height * 0.45, 'Play', () => {
-      this.scene.start(SCENES.game);
+      this.requestFullscreenThen(() => this.scene.start(SCENES.game));
     });
     this.createButton(width * 0.5, height * 0.58, 'Customize Car / Map', () => {
-      this.scene.start(SCENES.customize);
+      this.requestFullscreenThen(() => this.scene.start(SCENES.customize));
     });
     this.createButton(width * 0.5, height * 0.71, 'Settings', () => {
-      this.scene.start(SCENES.settings);
+      this.requestFullscreenThen(() => this.scene.start(SCENES.settings));
     });
+  }
+
+  private requestFullscreenThen(callback: () => void): void {
+    if (!this.scale.isFullscreen) {
+      try {
+        this.scale.startFullscreen();
+      } catch {
+        // fullscreen requires user gesture; continue without
+      }
+    }
+    callback();
   }
 
   private createButton(x: number, y: number, label: string, onClick: () => void): void {

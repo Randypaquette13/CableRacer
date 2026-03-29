@@ -28,4 +28,15 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [MainMenuScene, CustomizeScene, SettingsScene, GameScene, GameOverScene],
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    const el = document.fullscreenElement;
+    const w = el.clientWidth || window.screen.width;
+    const h = el.clientHeight || window.screen.height;
+    game.scale.resize(w, h);
+  } else {
+    game.scale.resize(window.innerWidth, window.innerHeight);
+  }
+});
