@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES } from '../core/config';
 import { InputManager, type InputAction } from '../core/InputManager';
+import { fontSize } from '../core/uiLayout';
 
 export class SettingsScene extends Phaser.Scene {
   private listeningFor?: InputAction;
@@ -17,20 +18,34 @@ export class SettingsScene extends Phaser.Scene {
 
   create(): void {
     const { width, height } = this.scale;
+    const pad = Math.max(16, width * 0.04);
     this.add.rectangle(width * 0.5, height * 0.5, width, height, 0x071322);
-    this.add.text(40, 24, 'Settings - Keybindings', { fontSize: '44px', color: '#ffffff' });
+    this.add.text(pad, 20, 'Settings — Keybindings', {
+      fontSize: fontSize(36, width, 18, 48),
+      color: '#ffffff',
+      wordWrap: { width: width - pad * 2 },
+    });
 
-    this.createBindingRow('hookLeft', 'Hook Left', 140);
-    this.createBindingRow('hookRight', 'Hook Right', 220);
-    this.createBindingRow('releaseHook', 'Release Hook', 300);
+    const rowGap = width < 480 ? 56 : 72;
+    let ry = 108;
+    this.createBindingRow('hookLeft', 'Hook Left', ry);
+    ry += rowGap;
+    this.createBindingRow('hookRight', 'Hook Right', ry);
+    ry += rowGap;
+    this.createBindingRow('releaseHook', 'Release Hook', ry);
 
-    this.statusText = this.add.text(40, 390, '', { fontSize: '22px', color: '#90caf9' });
+    this.statusText = this.add.text(pad, ry + 72, '', {
+      fontSize: fontSize(18, width),
+      color: '#90caf9',
+      wordWrap: { width: width - pad * 2 },
+    });
 
     this.add
-      .text(width - 170, height - 50, 'Back', {
-        fontSize: '28px',
+      .text(width - pad, height - 44, 'Back', {
+        fontSize: fontSize(24, width),
         color: '#ffd54f',
       })
+      .setOrigin(1, 0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start(SCENES.menu));
 
@@ -46,11 +61,18 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private createBindingRow(action: InputAction, label: string, y: number): void {
+    const { width } = this.scale;
+    const pad = Math.max(16, width * 0.04);
     const bindings = InputManager.getBindings();
-    this.add.text(40, y, label, { fontSize: '30px', color: '#ffffff' });
-    const keyText = this.add.text(350, y, bindings[action], { fontSize: '30px', color: '#90caf9' });
+    const fs = fontSize(24, width);
+    this.add.text(pad, y, label, { fontSize: fs, color: '#ffffff' });
+    const keyText = this.add.text(width * 0.48, y, bindings[action], {
+      fontSize: fs,
+      color: '#90caf9',
+    });
     const rebind = this.add
-      .text(520, y, '[Rebind]', { fontSize: '30px', color: '#ffd54f' })
+      .text(width - pad, y, '[Rebind]', { fontSize: fs, color: '#ffd54f' })
+      .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true });
     rebind.on('pointerdown', () => {
       this.listeningFor = action;

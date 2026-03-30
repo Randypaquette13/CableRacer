@@ -15,7 +15,7 @@ type SaveData = {
 
 const defaultSave: SaveData = {
   highScoreDistance: 0,
-  walletCoins: 1000,
+  walletCoins: 0,
   unlockedSkins: ['classic'],
   unlockedThemes: ['deepCave'],
   selectedSkin: 'classic',
@@ -112,10 +112,12 @@ export class ProgressionService {
       const parsed = JSON.parse(raw) as Partial<SaveData>;
       const selectedSkin = parsed.selectedSkin ?? defaultSave.selectedSkin;
       const selectedTheme = parsed.selectedTheme ?? defaultSave.selectedTheme;
-      const hadBonus = parsed.bonusCoinsGranted === true;
+      const wc = parsed.walletCoins;
+      const walletCoins =
+        typeof wc === 'number' && Number.isFinite(wc) ? Math.max(0, Math.floor(wc)) : 0;
       return {
         highScoreDistance: parsed.highScoreDistance ?? 0,
-        walletCoins: (parsed.walletCoins ?? 0) + (hadBonus ? 0 : 1000),
+        walletCoins,
         unlockedSkins: parsed.unlockedSkins?.length ? parsed.unlockedSkins : ['classic'],
         unlockedThemes: parsed.unlockedThemes?.length ? parsed.unlockedThemes : ['deepCave'],
         selectedSkin,

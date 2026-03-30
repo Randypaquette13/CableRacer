@@ -7,6 +7,7 @@ import {
   type LeaderboardEntry,
 } from '../core/leaderboardApi';
 import { ProgressionService } from '../core/ProgressionService';
+import { fontSize, menuButtonWidth } from '../core/uiLayout';
 import { hideLeaderboardOverlay, promptHighScoreName, showLeaderboardChecking } from '../core/nameEntry';
 
 /** Run stats for this death only. Local “best” is read from ProgressionService. */
@@ -65,7 +66,7 @@ export class GameOverScene extends Phaser.Scene {
     if (!run) {
       this.add
         .text(width * 0.5, height * 0.5, 'Missing run data — returning to menu', {
-          fontSize: '22px',
+          fontSize: fontSize(22, width),
           color: '#ffab91',
         })
         .setOrigin(0.5);
@@ -74,49 +75,96 @@ export class GameOverScene extends Phaser.Scene {
     }
     this.add.rectangle(width * 0.5, height * 0.5, width, height, 0x170b0b);
 
-    this.add.text(width * 0.5, 70, 'Game Over', { fontSize: '56px', color: '#ff8a80' }).setOrigin(0.5);
-    this.add
-      .text(width * 0.5, 170, `Distance: ${Math.floor(run.distance)}m`, {
-        fontSize: '36px',
-        color: '#ffffff',
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(width * 0.5, 220, `Coins Collected: ${run.coins}`, {
-        fontSize: '32px',
-        color: '#ffd54f',
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(width * 0.5, 268, `Your best (local): ${Math.floor(ProgressionService.data.highScoreDistance)}m`, {
-        fontSize: '26px',
-        color: '#90caf9',
-      })
-      .setOrigin(0.5);
+    const cx = width * 0.5;
+    /** Phones / small windows: stacked layout. Desktop: original fixed positions + top-anchored leaderboard. */
+    const compact = width < 560 || height < 620;
 
-    this.add.text(width * 0.5, 318, 'Top scores (server)', {
-      fontSize: '22px',
-      color: '#b0bec5',
-    }).setOrigin(0.5);
+    if (!compact) {
+      this.add.text(cx, 70, 'Game Over', { fontSize: fontSize(56, width, 24, 64), color: '#ff8a80' }).setOrigin(0.5);
+      this.add
+        .text(cx, 170, `Distance: ${Math.floor(run.distance)}m`, {
+          fontSize: fontSize(36, width),
+          color: '#ffffff',
+        })
+        .setOrigin(0.5);
+      this.add
+        .text(cx, 220, `Coins Collected: ${run.coins}`, {
+          fontSize: fontSize(32, width),
+          color: '#ffd54f',
+        })
+        .setOrigin(0.5);
+      this.add
+        .text(cx, 268, `Your best (local): ${Math.floor(ProgressionService.data.highScoreDistance)}m`, {
+          fontSize: fontSize(26, width),
+          color: '#90caf9',
+        })
+        .setOrigin(0.5);
+      this.add.text(cx, 318, 'Top scores (server)', {
+        fontSize: fontSize(22, width),
+        color: '#b0bec5',
+      }).setOrigin(0.5);
+      /** Top-centered so multiple lines grow downward (center origin made desktop spacing look wrong). */
+      this.leaderboardText = this.add
+        .text(cx, 356, 'Loading…', {
+          fontSize: fontSize(20, width),
+          color: '#ffffff',
+          align: 'center',
+          lineSpacing: 6,
+          wordWrap: { width: width - 40 },
+        })
+        .setOrigin(0.5, 0);
+    } else {
+      const g = 34;
+      let y = 28;
+      this.add.text(cx, y, 'Game Over', { fontSize: fontSize(48, width, 20, 64), color: '#ff8a80' }).setOrigin(0.5);
+      y += g + 8;
+      this.add
+        .text(cx, y, `Distance: ${Math.floor(run.distance)}m`, {
+          fontSize: fontSize(30, width),
+          color: '#ffffff',
+        })
+        .setOrigin(0.5);
+      y += g;
+      this.add
+        .text(cx, y, `Coins Collected: ${run.coins}`, {
+          fontSize: fontSize(26, width),
+          color: '#ffd54f',
+        })
+        .setOrigin(0.5);
+      y += g;
+      this.add
+        .text(cx, y, `Your best (local): ${Math.floor(ProgressionService.data.highScoreDistance)}m`, {
+          fontSize: fontSize(22, width),
+          color: '#90caf9',
+        })
+        .setOrigin(0.5);
+      y += 28;
+      this.add.text(cx, y, 'Top scores (server)', {
+        fontSize: fontSize(20, width),
+        color: '#b0bec5',
+      }).setOrigin(0.5);
+      y += 30;
+      this.leaderboardText = this.add
+        .text(cx, y, 'Loading…', {
+          fontSize: fontSize(18, width),
+          color: '#ffffff',
+          align: 'center',
+          lineSpacing: 4,
+          wordWrap: { width: width - 24 },
+        })
+        .setOrigin(0.5, 0);
+    }
 
-    this.leaderboardText = this.add
-      .text(width * 0.5, 368, 'Loading…', {
-        fontSize: '20px',
-        color: '#ffffff',
-        align: 'center',
-        lineSpacing: 6,
-        wordWrap: { width: width - 40 },
-      })
-      .setOrigin(0.5);
-
-    this.createButton(width * 0.5, height * 0.82, 'Retry', () => {
+    const btnLow = compact ? height * 0.88 : height * 0.92;
+    const btnHigh = compact ? height * 0.78 : height * 0.82;
+    this.createButton(width * 0.5, btnHigh, 'Retry', () => {
       if (!this.navEnabled) {
         return;
       }
       this.scene.stop(SCENES.gameOver);
       this.scene.start(SCENES.game);
     });
-    this.createButton(width * 0.5, height * 0.92, 'Main Menu', () => {
+    this.createButton(width * 0.5, btnLow, 'Main Menu', () => {
       if (!this.navEnabled) {
         return;
       }
@@ -151,10 +199,13 @@ export class GameOverScene extends Phaser.Scene {
     label: string,
     onClick: () => void,
   ): void {
-    const bg = this.add.rectangle(x, y, 260, 55, 0x2b1a1a).setInteractive({ useHandCursor: true });
+    const w = this.scale.width;
+    const bw = menuButtonWidth(w);
+    const bh = w < 420 ? 48 : 52;
+    const bg = this.add.rectangle(x, y, bw, bh, 0x2b1a1a).setInteractive({ useHandCursor: true });
     const text = this.add
       .text(x, y, label, {
-        fontSize: '28px',
+        fontSize: fontSize(24, w),
         color: '#ffffff',
       })
       .setOrigin(0.5);

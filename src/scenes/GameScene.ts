@@ -2,6 +2,12 @@ import Phaser from 'phaser';
 import { CAR_SKINS, MAP_THEMES, SCENES } from '../core/config';
 import { InputManager } from '../core/InputManager';
 import { ProgressionService } from '../core/ProgressionService';
+import { fontSize, isCoarsePointer } from '../core/uiLayout';
+
+/** Height of the playfield in screen px (top half on phone touch UI). */
+function gameViewHeightPx(scene: Phaser.Scene, phoneSplit: boolean): number {
+  return phoneSplit ? scene.scale.height * 0.5 : scene.scale.height;
+}
 
 type ExtendingHook = {
   /** World position where the cable was shot from (fixed ray origin) */
@@ -72,6 +78,18 @@ export class GameScene extends Phaser.Scene {
   private skidRight: Phaser.Math.Vector2[] = [];
   private lastSkidSample = new Phaser.Math.Vector2();
   private hasSkidSample = false;
+  /** Touch-first phones: game in top half, grappling controls in bottom half. */
+  private phoneSplit = false;
+  /** Visible playfield height (matches main camera size). */
+  private gameViewHeight = 0;
+  private phoneControlDisposables: Phaser.GameObjects.GameObject[] = [];
+  private readonly onResizeGameLayout = (): void => {
+    this.gameViewHeight = gameViewHeightPx(this, this.phoneSplit);
+    this.applyGameViewCamera();
+    if (this.phoneSplit) {
+      this.createPhoneControlStrip();
+    }
+  };
 
   constructor() {
     super(SCENES.game);
@@ -79,6 +97,8 @@ export class GameScene extends Phaser.Scene {
 
   shutdown(): void {
     document.body.style.cursor = '';
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.onResizeGameLayout, this);
+    this.destroyPhoneControls();
   }
 
   preload(): void {
@@ -86,6 +106,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.phoneSplit = isCoarsePointer();
+    this.gameViewHeight = gameViewHeightPx(this, this.phoneSplit);
+
     const save = ProgressionService.data;
     const theme = MAP_THEMES.find((entry) => entry.id === save.selectedTheme);
     const skin = CAR_SKINS.find((entry) => entry.id === save.selectedSkin);
@@ -107,18 +130,26 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.stopFollow();
     this.cameras.main.setZoom(1);
-    this.cameras.main.setScroll(0, this.carPosition.y - this.scale.height * 0.5);
+    this.applyGameViewCamera();
+    this.cameras.main.setScroll(0, this.carPosition.y - this.gameViewHeight * 0.5);
 
+    const w = this.scale.width;
     this.hudText = this.add
-      .text(20, 14, 'Distance: 0m  Coins: 0', {
-        fontSize: '28px',
+      .text(16, 12, 'Distance: 0m  Coins: 0', {
+        fontSize: fontSize(26, w),
         color: '#ffffff',
       })
       .setScrollFactor(0);
+    const helpLine = this.phoneSplit
+      ? 'Hook L / Release / Hook R — bottom strip'
+      : isCoarsePointer()
+        ? 'Tap left / right — center releases hook'
+        : 'Mouse: L / R click · Keys · Space: release';
     this.add
-      .text(20, 52, 'L/R: Hook Left/Right  |  Space: Release', {
-        fontSize: '20px',
+      .text(16, 46, helpLine, {
+        fontSize: fontSize(17, w),
         color: '#90caf9',
+        wordWrap: { width: w - 28 },
       })
       .setScrollFactor(0);
 
@@ -127,6 +158,10 @@ export class GameScene extends Phaser.Scene {
     document.body.style.cursor = 'none';
     this.input.off('pointerdown', this.onPointerDown, this);
     this.input.on('pointerdown', this.onPointerDown, this);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.onResizeGameLayout, this);
+    if (this.phoneSplit) {
+      this.createPhoneControlStrip();
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onPointerDown, this);
     });
@@ -287,17 +322,105 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private applyGameViewCamera(): void {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const cam = this.cameras.main;
+    if (this.phoneSplit) {
+      const gh = h * 0.5;
+      cam.setViewport(0, 0, w, gh);
+      cam.setSize(w, gh);
+    } else {
+      cam.setViewport(0, 0, w, h);
+      cam.setSize(w, h);
+    }
+  }
+
+  private destroyPhoneControls(): void {
+    this.phoneControlDisposables.forEach((o) => o.destroy());
+    this.phoneControlDisposables = [];
+  }
+
+  private createPhoneControlStrip(): void {
+    this.destroyPhoneControls();
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const gh = h * 0.5;
+    const stripH = h - gh;
+    const third = w / 3;
+    const yMid = gh + stripH * 0.5;
+
+    const track = (o: Phaser.GameObjects.GameObject) => {
+      this.phoneControlDisposables.push(o);
+    };
+
+    const bg = this.add.rectangle(w * 0.5, yMid, w, stripH, 0x0d1219, 0.94);
+    bg.setScrollFactor(0);
+    bg.setDepth(5000);
+    bg.setStrokeStyle(1, 0x2a3f5c, 0.95);
+    track(bg);
+
+    const addZone = (cx: number, label: string, fn: () => void) => {
+      const z = this.add.rectangle(cx, yMid, third - 8, stripH - 12, 0x1e2a3a, 0.92);
+      z.setScrollFactor(0);
+      z.setDepth(5001);
+      z.setInteractive({ useHandCursor: true });
+      z.on('pointerdown', () => {
+        if (!this.gameEnded) {
+          fn();
+        }
+      });
+      const t = this.add
+        .text(cx, yMid, label, {
+          fontSize: fontSize(18, w),
+          color: '#b0c4de',
+        })
+        .setOrigin(0.5);
+      t.setScrollFactor(0);
+      t.setDepth(5002);
+      track(z);
+      track(t);
+    };
+
+    addZone(third * 0.5, 'Hook L', () => this.fireHook(-1));
+    addZone(third * 1.5, 'Release', () => this.releaseHook());
+    addZone(third * 2.5, 'Hook R', () => this.fireHook(1));
+  }
+
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.gameEnded) {
       return;
     }
-    if (pointer.button === 0) {
+    /** Bottom strip owns touch on phone; avoid double-firing with zone buttons. */
+    if (this.phoneSplit && pointer.wasTouch) {
+      return;
+    }
+    /** Mouse: restore L / R buttons. Touch: screen zones + center to release (no RMB). */
+    if (!pointer.wasTouch) {
+      if (pointer.button === 0) {
+        this.fireHook(-1);
+        return;
+      }
+      if (pointer.button === 2) {
+        this.fireHook(1);
+        return;
+      }
+      return;
+    }
+    const w = this.scale.width;
+    if (w <= 0) {
+      return;
+    }
+    const t = pointer.x / w;
+    if (t < 0.34) {
       this.fireHook(-1);
       return;
     }
-    if (pointer.button === 2) {
+    if (t > 0.66) {
       this.fireHook(1);
+      return;
     }
+    this.releaseHook();
   }
 
   private fireHook(sideSign: -1 | 1): boolean {
@@ -579,8 +702,9 @@ export class GameScene extends Phaser.Scene {
 
   private updateCameraScroll(): void {
     const cam = this.cameras.main;
-    const midpointY = cam.scrollY + this.scale.height * 0.5;
-    const targetUpScroll = this.carPosition.y - this.scale.height * 0.5;
+    const vh = this.gameViewHeight;
+    const midpointY = cam.scrollY + vh * 0.5;
+    const targetUpScroll = this.carPosition.y - vh * 0.5;
 
     cam.scrollX = 0;
     // Camera only moves up and never down.
