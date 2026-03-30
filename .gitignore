@@ -10,6 +10,9 @@ build/
 .env.local
 .env.*.local
 
+# Server leaderboard (file-backed; optional local data)
+data/leaderboard.json
+
 # Logs
 *.log
 npm-debug.log*

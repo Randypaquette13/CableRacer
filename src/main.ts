@@ -17,6 +17,8 @@ const config: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    /** Default Phaser fullscreen wraps only the canvas; DOM overlays in #app would stay outside fullscreen. */
+    fullscreenTarget: 'app',
   },
   physics: {
     default: 'matter',

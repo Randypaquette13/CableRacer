@@ -3,16 +3,25 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.mjs",
+    "dev:server:fresh": "npx --yes kill-port@2.0.1 3001 && node server/index.mjs",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:server:fresh\"",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server/index.mjs"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "typescript": "~5.9.3",
     "vite": "^7.3.1"
   },
   "dependencies": {
+    "express": "^4.21.2",
     "phaser": "^3.90.0"
   }
 }

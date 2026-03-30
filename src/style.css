@@ -12,3 +12,79 @@ body,
 canvas {
   display: block;
 }
+
+/* Phaser appends the canvas after the name overlay; keep draw order explicit. */
+#app > canvas {
+  position: relative;
+  z-index: 0;
+}
+
+.name-entry-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 13, 0.82);
+}
+
+/* [hidden] must win; plain .name-entry-overlay { display:flex } otherwise overrides the UA default for [hidden]. */
+.name-entry-overlay[hidden] {
+  display: none !important;
+}
+
+.name-entry-card {
+  background: #1a2332;
+  border: 2px solid #3d5a80;
+  border-radius: 10px;
+  padding: 24px 28px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.name-entry-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #e3f2fd;
+}
+
+.name-entry-checking {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #90caf9;
+}
+
+.name-entry-form-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.name-entry-input {
+  width: min(280px, 85vw);
+  font-size: 18px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid #546e7a;
+  border-radius: 6px;
+  background: #0b0f1a;
+  color: #fff;
+  display: block;
+}
+
+.name-entry-submit {
+  font-size: 16px;
+  padding: 8px 20px;
+  cursor: pointer;
+  background: #37474f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+}
+
+.name-entry-submit:hover {
+  background: #455a64;
+}

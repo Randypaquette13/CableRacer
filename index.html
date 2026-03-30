@@ -7,7 +7,26 @@
     <title>cableracer</title>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Overlay in #app with canvas; main.ts sets scale.fullscreenTarget: 'app' so fullscreen includes both. -->
+    <div id="app">
+      <div id="name-entry-overlay" class="name-entry-overlay" hidden>
+        <div class="name-entry-card">
+          <p id="name-entry-title" class="name-entry-title">Top 3 score! Enter your name:</p>
+          <p id="name-entry-checking" class="name-entry-checking" hidden>Checking leaderboard…</p>
+          <div id="name-entry-form-row" class="name-entry-form-row">
+            <input
+              type="text"
+              id="name-entry-input"
+              class="name-entry-input"
+              maxlength="24"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" id="name-entry-submit" class="name-entry-submit">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

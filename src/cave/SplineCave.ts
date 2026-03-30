@@ -27,14 +27,6 @@ export class SplineCave {
     this.path = this.buildPath(config.screenWidth, config.screenHeight, config.halfWidth);
     this.totalLength = this.path.getLength();
     this.cachedPoints = this.path.getSpacedPoints(SPLINE_SAMPLES);
-    // #region agent log
-    const curves = (this.path as any).curves?.length ?? 0;
-    const p0 = this.cachedPoints[0];
-    const pN = this.cachedPoints[this.cachedPoints.length - 1];
-    const payload = { curves, totalLength: this.totalLength, cachedLen: this.cachedPoints.length, halfWidth: this.halfWidth, p0x: p0?.x, p0y: p0?.y, pNx: pN?.x, pNy: pN?.y };
-    console.warn('[Cave H1] Path init', payload);
-    fetch('http://127.0.0.1:7438/ingest/fbc2db40-b056-4b77-90e1-9ded15eb52a0',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'483a1c'},body:JSON.stringify({sessionId:'483a1c',location:'SplineCave.ts:ctor',message:'Path init',data:payload,timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
   }
 
   /**
@@ -224,17 +216,6 @@ export class SplineCave {
         right.unshift(new Phaser.Math.Vector2(pointOut.x - nx * this.halfWidth, pointOut.y - ny * this.halfWidth));
       }
     }
-    // #region agent log
-    const _boundsLogCount = (SplineCave as any)._boundsLogCount = ((SplineCave as any)._boundsLogCount ?? 0) + 1;
-    if (left.length > 0 && _boundsLogCount % 60 === 1) {
-      this.path.getPoint(0, point);
-      this.path.getTangent(0, tangent);
-      tangent.normalize();
-      const data = { leftLen: left.length, visibleY0, visibleY1, skipped, firstLx: left[0].x, firstLy: left[0].y, lastLy: left[left.length - 1].y, tangentX: tangent.x, tangentY: tangent.y };
-      console.warn('[Cave H2] Bounds', data);
-      fetch('http://127.0.0.1:7438/ingest/fbc2db40-b056-4b77-90e1-9ded15eb52a0',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'483a1c'},body:JSON.stringify({sessionId:'483a1c',location:'SplineCave.ts:getPathBounds',message:'Bounds',data,timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    }
-    // #endregion
     return { left, right };
   }
 

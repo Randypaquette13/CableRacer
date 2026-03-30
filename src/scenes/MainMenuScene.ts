@@ -1,6 +1,19 @@
 import Phaser from 'phaser';
 import { SCENES } from '../core/config';
+import { fetchLeaderboard, type LeaderboardEntry } from '../core/leaderboardApi';
 import { ProgressionService } from '../core/ProgressionService';
+
+function formatLeaderboardLines(entries: LeaderboardEntry[], error: string | null): string {
+  if (error) {
+    return `(offline) ${error}`;
+  }
+  if (entries.length === 0) {
+    return '—';
+  }
+  return entries
+    .map((e, i) => `${i + 1}. ${e.name} ${Math.floor(e.distance)}m`)
+    .join('\n');
+}
 
 export class MainMenuScene extends Phaser.Scene {
   constructor() {
@@ -19,6 +32,14 @@ export class MainMenuScene extends Phaser.Scene {
     this.add.text(30, 55, `Coins: ${save.walletCoins}`, {
       fontSize: '22px',
       color: '#ffd54f',
+    });
+    const leaderboardLabel = this.add.text(30, 88, 'Top 3 (server):\n…', {
+      fontSize: '18px',
+      color: '#b0bec5',
+      wordWrap: { width: this.scale.width - 60 },
+    });
+    void fetchLeaderboard().then(({ scores, error }) => {
+      leaderboardLabel.setText(`Top 3 (server):\n${formatLeaderboardLines(scores, error)}`);
     });
 
     this.add

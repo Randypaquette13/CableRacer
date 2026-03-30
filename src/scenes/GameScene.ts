@@ -645,11 +645,9 @@ export class GameScene extends Phaser.Scene {
   private endRun(): void {
     this.gameEnded = true;
     ProgressionService.addRunResult(Math.floor(this.distance), this.coinsCollected);
-    const latest = ProgressionService.data;
     this.scene.start(SCENES.gameOver, {
       distance: this.distance,
       coins: this.coinsCollected,
-      highScore: latest.highScoreDistance,
     });
   }
 }
