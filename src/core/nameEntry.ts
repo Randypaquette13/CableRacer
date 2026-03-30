@@ -2,7 +2,7 @@
 
 /** Disable only the Phaser canvas so clicks/typing reach the DOM overlay (#app children). Never set pointer-events:none on #app — that blocks the overlay too. */
 function setCanvasPointerEvents(enabled: boolean): void {
-  const canvas = document.querySelector('#app > canvas') as HTMLCanvasElement | null;
+  const canvas = document.querySelector('#game-mount canvas') as HTMLCanvasElement | null;
   if (canvas) {
     canvas.style.pointerEvents = enabled ? '' : 'none';
   }

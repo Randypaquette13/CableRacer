@@ -9,7 +9,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from './core/config';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  parent: 'app',
+  parent: 'game-mount',
   /** Fixed 16:9; Scale.FIT letterboxes on phones so layout matches desktop proportions. */
   width: GAME_WIDTH,
   height: GAME_HEIGHT,

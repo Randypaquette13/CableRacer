@@ -12,6 +12,66 @@ body,
   min-height: 100dvh;
 }
 
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+.game-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+#game-mount {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Grapple row: only shown during game on coarse pointer; sits under the canvas, full width */
+.phone-game-controls {
+  flex: 0 0 auto;
+  flex-direction: row;
+  width: 100%;
+  min-height: 120px;
+  height: 42dvh;
+  max-height: 50vh;
+  box-sizing: border-box;
+  padding: max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-right)) 4px
+    max(4px, env(safe-area-inset-left));
+  gap: 6px;
+  background: #0d1219;
+  border-top: 2px solid #2a3f5c;
+  align-items: stretch;
+}
+
+.phone-game-controls:not([hidden]) {
+  display: flex;
+}
+
+.phone-game-btn {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 8px;
+  font-size: clamp(14px, 3.8vw, 22px);
+  font-weight: 600;
+  color: #b0c4de;
+  background: #1e2a3a;
+  border: 1px solid #3d5a80;
+  border-radius: 8px;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.phone-game-btn:active {
+  background: #2a3d52;
+}
+
 body {
   overscroll-behavior: none;
   -webkit-touch-callout: none;
@@ -22,8 +82,8 @@ canvas {
   touch-action: none;
 }
 
-/* Phaser appends the canvas after the name overlay; keep draw order explicit. */
-#app > canvas {
+/* Phaser injects canvas into #game-mount */
+#game-mount > canvas {
   position: relative;
   z-index: 0;
 }

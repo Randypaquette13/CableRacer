@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CAR_SKINS, MAP_THEMES, SCENES } from '../core/config';
 import { InputManager } from '../core/InputManager';
 import { ProgressionService } from '../core/ProgressionService';
+import { hidePhoneGameControls, showPhoneGameControls } from '../core/phoneGameControls';
 import { fontSize, isCoarsePointer } from '../core/uiLayout';
 
 /** Touch on some mobile browsers — prefer wasTouch + pointerType. */
@@ -82,15 +83,8 @@ export class GameScene extends Phaser.Scene {
   private skidRight: Phaser.Math.Vector2[] = [];
   private lastSkidSample = new Phaser.Math.Vector2();
   private hasSkidSample = false;
-  /** Touch-first phones: bottom strip for L / release / R (game stays full 16:9 view). */
+  /** Touch-first phones: DOM grapple bar under canvas (see phoneGameControls.ts). */
   private phoneSplit = false;
-  private phoneControlDisposables: Phaser.GameObjects.GameObject[] = [];
-  private readonly onResizeGameLayout = (): void => {
-    this.applyGameViewCamera();
-    if (this.phoneSplit) {
-      this.createPhoneControlStrip();
-    }
-  };
 
   constructor() {
     super(SCENES.game);
@@ -98,8 +92,7 @@ export class GameScene extends Phaser.Scene {
 
   shutdown(): void {
     document.body.style.cursor = '';
-    this.scale.off(Phaser.Scale.Events.RESIZE, this.onResizeGameLayout, this);
-    this.destroyPhoneControls();
+    hidePhoneGameControls(() => this.scale.refresh());
   }
 
   preload(): void {
@@ -142,7 +135,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setScrollFactor(0);
     const helpLine = this.phoneSplit
-      ? 'Hook L / Release / Hook R — bottom strip'
+      ? 'Use the buttons below the game'
       : isCoarsePointer()
         ? 'Tap left / right — center releases hook'
         : 'Mouse: L / R click · Keys · Space: release';
@@ -159,9 +152,27 @@ export class GameScene extends Phaser.Scene {
     document.body.style.cursor = 'none';
     this.input.off('pointerdown', this.onPointerDown, this);
     this.input.on('pointerdown', this.onPointerDown, this);
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.onResizeGameLayout, this);
     if (this.phoneSplit) {
-      this.createPhoneControlStrip();
+      showPhoneGameControls(
+        {
+          onHookLeft: () => {
+            if (!this.gameEnded) {
+              void this.fireHook(-1);
+            }
+          },
+          onRelease: () => {
+            if (!this.gameEnded) {
+              this.releaseHook();
+            }
+          },
+          onHookRight: () => {
+            if (!this.gameEnded) {
+              void this.fireHook(1);
+            }
+          },
+        },
+        () => this.scale.refresh(),
+      );
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onPointerDown, this);
@@ -333,63 +344,12 @@ export class GameScene extends Phaser.Scene {
     cam.setSize(w, h);
   }
 
-  /** Bottom strip: full lower portion of the 16:9 view for grapple controls (must match onPointerDown). */
-  private getPhoneStripHeight(): number {
-    return Math.round(this.scale.height * 0.45);
-  }
-
-  private destroyPhoneControls(): void {
-    this.phoneControlDisposables.forEach((o) => o.destroy());
-    this.phoneControlDisposables = [];
-  }
-
-  private createPhoneControlStrip(): void {
-    this.destroyPhoneControls();
-    const w = this.scale.width;
-    const h = this.scale.height;
-    const stripH = this.getPhoneStripHeight();
-    const third = w / 3;
-    const yMid = h - stripH * 0.5;
-    const pad = 4;
-
-    const track = (o: Phaser.GameObjects.GameObject) => {
-      this.phoneControlDisposables.push(o);
-    };
-
-    const bg = this.add.rectangle(w * 0.5, yMid, w, stripH, 0x0d1219, 0.96);
-    bg.setScrollFactor(0);
-    bg.setDepth(5000);
-    bg.setStrokeStyle(2, 0x2a3f5c, 1);
-    track(bg);
-
-    const addZone = (cx: number, label: string) => {
-      const z = this.add.rectangle(cx, yMid, third - pad * 2, stripH - pad * 2, 0x1e2a3a, 0.95);
-      z.setScrollFactor(0);
-      z.setDepth(5001);
-      const t = this.add
-        .text(cx, yMid, label, {
-          fontSize: fontSize(stripH >= 280 ? 28 : 24, w),
-          color: '#b0c4de',
-        })
-        .setOrigin(0.5);
-      t.setScrollFactor(0);
-      t.setDepth(5002);
-      track(z);
-      track(t);
-    };
-
-    addZone(third * 0.5, 'Hook L');
-    addZone(third * 1.5, 'Release');
-    addZone(third * 2.5, 'Hook R');
-  }
-
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     if (this.gameEnded) {
       return;
     }
     const w = this.scale.width;
-    const h = this.scale.height;
-    if (w <= 0 || h <= 0) {
+    if (w <= 0 || this.scale.height <= 0) {
       return;
     }
 
@@ -408,22 +368,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    /** Touch: bottom strip = hooks; rest of 16:9 view = gameplay only (no accidental hooks). */
+    /** Phone hooks are DOM buttons under the canvas — ignore touch on gameplay area. */
     if (this.phoneSplit) {
-      const stripH = this.getPhoneStripHeight();
-      if (pointer.y <= h - stripH) {
-        return;
-      }
-      const t = pointer.x / w;
-      if (t < 0.34) {
-        this.fireHook(-1);
-        return;
-      }
-      if (t > 0.66) {
-        this.fireHook(1);
-        return;
-      }
-      this.releaseHook();
       return;
     }
 

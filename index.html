@@ -10,8 +10,16 @@
     <title>cableracer</title>
   </head>
   <body>
-    <!-- Overlay in #app with canvas; main.ts sets scale.fullscreenTarget: 'app' so fullscreen includes both. -->
+    <!-- game-mount: Phaser canvas only. phone-game-controls: below canvas on touch (see phoneGameControls.ts). -->
     <div id="app">
+      <div class="game-layout">
+        <div id="game-mount"></div>
+        <div id="phone-game-controls" class="phone-game-controls" hidden>
+          <button type="button" class="phone-game-btn" id="phone-hook-l">Hook L</button>
+          <button type="button" class="phone-game-btn" id="phone-release">Release</button>
+          <button type="button" class="phone-game-btn" id="phone-hook-r">Hook R</button>
+        </div>
+      </div>
       <div id="name-entry-overlay" class="name-entry-overlay" hidden>
         <div class="name-entry-card">
           <p id="name-entry-title" class="name-entry-title">Top 3 score! Enter your name:</p>
