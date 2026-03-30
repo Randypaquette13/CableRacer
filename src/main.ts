@@ -10,12 +10,13 @@ import { GAME_HEIGHT, GAME_WIDTH } from './core/config';
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  width: window.innerWidth || GAME_WIDTH,
-  height: window.innerHeight || GAME_HEIGHT,
+  /** Fixed 16:9; Scale.FIT letterboxes on phones so layout matches desktop proportions. */
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
   antialias: true,
   backgroundColor: '#0b0f1a',
   scale: {
-    mode: Phaser.Scale.RESIZE,
+    mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     /** Default Phaser fullscreen wraps only the canvas; DOM overlays in #app would stay outside fullscreen. */
     fullscreenTarget: 'app',
@@ -33,12 +34,5 @@ const config: Phaser.Types.Core.GameConfig = {
 const game = new Phaser.Game(config);
 
 document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) {
-    const el = document.fullscreenElement;
-    const w = el.clientWidth || window.screen.width;
-    const h = el.clientHeight || window.screen.height;
-    game.scale.resize(w, h);
-  } else {
-    game.scale.resize(window.innerWidth, window.innerHeight);
-  }
+  game.scale.refresh();
 });
