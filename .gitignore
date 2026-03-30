@@ -10,8 +10,8 @@ build/
 .env.local
 .env.*.local
 
-# Server leaderboard (file-backed; optional local data)
-data/leaderboard.json
+# Server leaderboard — never commit (deploy keeps its own file; git push must not overwrite Railway data)
+**/leaderboard.json
 
 # Logs
 *.log

@@ -169,7 +169,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetRunState(): void {
-    const startY = this.scale.height - 140;
+    /** Slightly higher start on phone (closer to first horizontal divider). */
+    const marginFromBottom = this.phoneSplit ? 158 : 140;
+    const startY = this.scale.height - marginFromBottom;
     this.startY = startY;
     this.carPosition.set((this.getPathMinX() + this.getPathMaxX()) * 0.5, startY);
     this.carHeading = 0;
@@ -331,9 +333,9 @@ export class GameScene extends Phaser.Scene {
     cam.setSize(w, h);
   }
 
-  /** Bottom strip height in game pixels (must match touch hit-test in onPointerDown). */
+  /** Bottom strip: full lower portion of the 16:9 view for grapple controls (must match onPointerDown). */
   private getPhoneStripHeight(): number {
-    return Math.round(Math.min(140, this.scale.height * 0.2));
+    return Math.round(this.scale.height * 0.45);
   }
 
   private destroyPhoneControls(): void {
@@ -348,24 +350,25 @@ export class GameScene extends Phaser.Scene {
     const stripH = this.getPhoneStripHeight();
     const third = w / 3;
     const yMid = h - stripH * 0.5;
+    const pad = 4;
 
     const track = (o: Phaser.GameObjects.GameObject) => {
       this.phoneControlDisposables.push(o);
     };
 
-    const bg = this.add.rectangle(w * 0.5, yMid, w, stripH, 0x0d1219, 0.94);
+    const bg = this.add.rectangle(w * 0.5, yMid, w, stripH, 0x0d1219, 0.96);
     bg.setScrollFactor(0);
     bg.setDepth(5000);
-    bg.setStrokeStyle(1, 0x2a3f5c, 0.95);
+    bg.setStrokeStyle(2, 0x2a3f5c, 1);
     track(bg);
 
     const addZone = (cx: number, label: string) => {
-      const z = this.add.rectangle(cx, yMid, third - 8, stripH - 12, 0x1e2a3a, 0.92);
+      const z = this.add.rectangle(cx, yMid, third - pad * 2, stripH - pad * 2, 0x1e2a3a, 0.95);
       z.setScrollFactor(0);
       z.setDepth(5001);
       const t = this.add
         .text(cx, yMid, label, {
-          fontSize: fontSize(18, w),
+          fontSize: fontSize(stripH >= 280 ? 28 : 24, w),
           color: '#b0c4de',
         })
         .setOrigin(0.5);
