@@ -204,7 +204,7 @@ export class GameScene extends Phaser.Scene {
     const car = this.add.container(this.carPosition.x, this.carPosition.y);
     if (this.skin.id === 'ember' && this.textures.exists('car-ember')) {
       const emberCar = this.add.image(0, 0, 'car-ember').setDisplaySize(92, 50);
-      emberCar.rotation = -Math.PI * 0.5;
+      emberCar.rotation = Math.PI;
       car.add(emberCar);
       return car;
     }
