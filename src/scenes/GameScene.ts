@@ -3,7 +3,11 @@ import { CAR_SKINS, MAP_THEMES, SCENES, type GameSceneData } from '../core/confi
 import { getLevelByIndex, LEVEL_COUNT, type LevelDefinition } from '../core/levelData';
 import { InputManager } from '../core/InputManager';
 import { ProgressionService } from '../core/ProgressionService';
-import { hidePhoneGameControls, showPhoneGameControls } from '../core/phoneGameControls';
+import {
+  hidePhoneGameControls,
+  setPhoneGameCenterRetry,
+  showPhoneGameControls,
+} from '../core/phoneGameControls';
 import { fontSize, isCoarsePointer } from '../core/uiLayout';
 
 /** Touch on some mobile browsers — prefer wasTouch + pointerType. */
@@ -307,9 +311,9 @@ export class GameScene extends Phaser.Scene {
     const marginFromBottom = this.phoneSplit ? 158 : 140;
     const startY = this.scale.height - marginFromBottom;
     this.startY = startY;
-    /** Timed levels: first divider is a centered gate; spawn mid-track heading up (same for every level). */
     this.carPosition.set((this.getPathMinX() + this.getPathMaxX()) * 0.5, startY);
-    this.carHeading = -Math.PI * 0.5;
+    /** Endless keeps the original start; timed levels use the newer centered-up intro. */
+    this.carHeading = this.runMode === 'level' ? -Math.PI * 0.5 : 0;
     this.speed = BASE_SPEED;
     this.distance = 0;
     this.coinsCollected = 0;
@@ -322,6 +326,9 @@ export class GameScene extends Phaser.Scene {
     this.hasSkidSample = false;
     this.lastSkidSample.set(this.carPosition.x, this.carPosition.y);
     this.skidGraphics?.clear();
+    if (this.phoneSplit) {
+      setPhoneGameCenterRetry(false);
+    }
   }
 
   private createCarSprite(): Phaser.GameObjects.Container {
@@ -951,6 +958,22 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.gameEnded = true;
+    if (this.phoneSplit) {
+      if (this.runMode === 'level') {
+        const elapsed = (this.time.now - this.levelStartTime) / 1000;
+        ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);
+        this.hudText.setText(`Crashed - Time: ${elapsed.toFixed(2)}s  Tap Retry`);
+      } else {
+        ProgressionService.addRunResult(Math.floor(this.distance), this.coinsCollected);
+        this.hudText.setText(`Crashed - Distance: ${Math.floor(this.distance)}m  Tap Retry`);
+      }
+      setPhoneGameCenterRetry(true, () => {
+        const payload: GameSceneData =
+          this.runMode === 'level' ? { mode: 'level', levelIndex: this.levelIndex } : { mode: 'endless' };
+        this.scene.start(SCENES.game, payload);
+      });
+      return;
+    }
     if (this.runMode === 'level') {
       const elapsed = (this.time.now - this.levelStartTime) / 1000;
       ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);

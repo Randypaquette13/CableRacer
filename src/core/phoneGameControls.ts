@@ -8,6 +8,31 @@ export type PhoneGameControlHandlers = {
 
 let abort: AbortController | null = null;
 
+function getReleaseButton(): HTMLButtonElement | null {
+  return document.getElementById('phone-release') as HTMLButtonElement | null;
+}
+
+export function setPhoneGameCenterRetry(
+  isRetry: boolean,
+  onRetry?: () => void,
+): void {
+  const btn = getReleaseButton();
+  if (!btn) {
+    return;
+  }
+  btn.textContent = isRetry ? 'Retry' : 'Release';
+  btn.classList.toggle('phone-game-btn-retry', isRetry);
+  if (onRetry) {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onRetry();
+    };
+    return;
+  }
+  btn.onclick = null;
+}
+
 export function showPhoneGameControls(handlers: PhoneGameControlHandlers, refreshScale: () => void): void {
   hidePhoneGameControls();
   const root = document.getElementById('phone-game-controls');
@@ -17,6 +42,7 @@ export function showPhoneGameControls(handlers: PhoneGameControlHandlers, refres
   abort = new AbortController();
   const { signal } = abort;
   root.hidden = false;
+  setPhoneGameCenterRetry(false);
 
   const bind = (id: string, fn: () => void) => {
     const el = document.getElementById(id);
@@ -46,6 +72,7 @@ export function showPhoneGameControls(handlers: PhoneGameControlHandlers, refres
 export function hidePhoneGameControls(refreshScale?: () => void): void {
   abort?.abort();
   abort = null;
+  setPhoneGameCenterRetry(false);
   const root = document.getElementById('phone-game-controls');
   if (root) {
     root.hidden = true;
