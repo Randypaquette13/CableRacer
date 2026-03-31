@@ -958,22 +958,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.gameEnded = true;
-    if (this.phoneSplit) {
-      if (this.runMode === 'level') {
-        const elapsed = (this.time.now - this.levelStartTime) / 1000;
-        ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);
-        this.hudText.setText(`Crashed - Time: ${elapsed.toFixed(2)}s  Tap Retry`);
-      } else {
-        ProgressionService.addRunResult(Math.floor(this.distance), this.coinsCollected);
-        this.hudText.setText(`Crashed - Distance: ${Math.floor(this.distance)}m  Tap Retry`);
-      }
-      setPhoneGameCenterRetry(true, () => {
-        const payload: GameSceneData =
-          this.runMode === 'level' ? { mode: 'level', levelIndex: this.levelIndex } : { mode: 'endless' };
-        this.scene.start(SCENES.game, payload);
-      });
-      return;
-    }
     if (this.runMode === 'level') {
       const elapsed = (this.time.now - this.levelStartTime) / 1000;
       ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);

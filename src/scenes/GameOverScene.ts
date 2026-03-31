@@ -6,8 +6,13 @@ import {
   wouldMakeTopThree,
   type LeaderboardEntry,
 } from '../core/leaderboardApi';
+import {
+  hidePhoneGameControls,
+  setPhoneGameCenterRetry,
+  showPhoneGameControls,
+} from '../core/phoneGameControls';
 import { ProgressionService } from '../core/ProgressionService';
-import { fontSize, menuButtonWidth } from '../core/uiLayout';
+import { fontSize, isCoarsePointer, menuButtonWidth } from '../core/uiLayout';
 import { hideLeaderboardOverlay, promptHighScoreName, showLeaderboardChecking } from '../core/nameEntry';
 
 /** Run stats for this death only. Local “best” is read from ProgressionService. */
@@ -57,11 +62,13 @@ export class GameOverScene extends Phaser.Scene {
 
   shutdown(): void {
     hideLeaderboardOverlay();
+    hidePhoneGameControls(() => this.scale.refresh());
   }
 
   create(data: GameOverData): void {
     document.body.style.cursor = '';
     const { width, height } = this.scale;
+    const phoneSplit = isCoarsePointer();
     const run = resolveGameOverData(this, data);
     if (!run) {
       this.add
@@ -171,6 +178,26 @@ export class GameOverScene extends Phaser.Scene {
       }
       this.scene.start(SCENES.menu);
     });
+
+    if (phoneSplit) {
+      const retry = () => {
+        if (!this.navEnabled) {
+          return;
+        }
+        this.scene.stop(SCENES.gameOver);
+        const payload: GameSceneData = { mode: 'endless' };
+        this.scene.start(SCENES.game, payload);
+      };
+      showPhoneGameControls(
+        {
+          onHookLeft: () => {},
+          onRelease: retry,
+          onHookRight: () => {},
+        },
+        () => this.scale.refresh(),
+      );
+      setPhoneGameCenterRetry(true, retry);
+    }
 
     void this.runLeaderboardFlow(run);
   }

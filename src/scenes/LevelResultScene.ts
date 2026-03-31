@@ -7,7 +7,12 @@ import {
   wouldMakeTopThreeTime,
   type LevelTimeEntry,
 } from '../core/leaderboardApi';
-import { fontSize, menuButtonWidth } from '../core/uiLayout';
+import {
+  hidePhoneGameControls,
+  setPhoneGameCenterRetry,
+  showPhoneGameControls,
+} from '../core/phoneGameControls';
+import { fontSize, isCoarsePointer, menuButtonWidth } from '../core/uiLayout';
 import { hideLeaderboardOverlay, promptHighScoreName, showLeaderboardChecking } from '../core/nameEntry';
 
 export type LevelResultPayload = {
@@ -51,11 +56,17 @@ export class LevelResultScene extends Phaser.Scene {
     super(SCENES.levelResult);
   }
 
+  shutdown(): void {
+    hideLeaderboardOverlay();
+    hidePhoneGameControls(() => this.scale.refresh());
+  }
+
   create(data: LevelResultPayload): void {
     document.body.style.cursor = '';
     const run = resolvePayload(this, data);
     const { width, height } = this.scale;
     const cx = width * 0.5;
+    const phoneSplit = isCoarsePointer();
 
     if (!run) {
       this.add
@@ -144,6 +155,19 @@ export class LevelResultScene extends Phaser.Scene {
     this.makeButton(cx, by, 'Level select', () => this.scene.start(SCENES.levelSelect));
     by += gap;
     this.makeButton(cx, by, 'Main menu', () => this.scene.start(SCENES.menu));
+
+    if (phoneSplit) {
+      const retry = () => startGame({ mode: 'level', levelIndex: run.levelIndex });
+      showPhoneGameControls(
+        {
+          onHookLeft: () => {},
+          onRelease: retry,
+          onHookRight: () => {},
+        },
+        () => this.scale.refresh(),
+      );
+      setPhoneGameCenterRetry(true, retry);
+    }
 
     void this.runLevelLeaderboardFlow(level.id, run.timeSec, run.cleared);
   }
