@@ -15,20 +15,25 @@ export class CustomizeScene extends Phaser.Scene {
     const save = ProgressionService.data;
     const narrow = width < 720;
     const pad = Math.max(16, width * 0.04);
-    const rowH = narrow ? 52 : 58;
+    const rowH = narrow ? 60 : 66;
+    const gutter = Math.max(18, width * 0.03);
+    const columnWidth = narrow ? width - pad * 2 : Math.floor((width - pad * 2 - gutter) * 0.5);
+    const leftX = pad;
+    const rightX = narrow ? pad : leftX + columnWidth + gutter;
 
     this.add.rectangle(width * 0.5, height * 0.5, width, height, 0x09111f);
     this.add.text(pad, 18, 'Customize', { fontSize: fontSize(40, width, 20, 56), color: '#ffffff' });
     this.add.text(pad, 72, `Coins: ${save.walletCoins}`, { fontSize: fontSize(26, width), color: '#ffd54f' });
 
-    this.add.text(pad, 124, 'Car Skins', { fontSize: fontSize(28, width), color: '#90caf9' });
-    let rowY = 168;
+    this.add.text(leftX, 124, 'Car Skins', { fontSize: fontSize(28, width), color: '#90caf9' });
+    const rowY = 168;
     CAR_SKINS.forEach((skin, index) => {
       const y = rowY + index * rowH;
       const unlocked = save.unlockedSkins.includes(skin.id);
       const selected = save.selectedSkin === skin.id;
       this.createPurchaseButton(
-        pad,
+        leftX,
+        columnWidth,
         y,
         `${skin.name} (${skin.cost})`,
         selected ? 'SELECTED' : unlocked ? 'USE' : 'BUY',
@@ -42,19 +47,19 @@ export class CustomizeScene extends Phaser.Scene {
       );
     });
 
-    const themesHeaderY = narrow ? rowY + CAR_SKINS.length * rowH + 28 : 124;
+    const themesHeaderY = narrow ? rowY + CAR_SKINS.length * rowH + 32 : 124;
     const themesStartY = narrow ? themesHeaderY + 36 : 168;
-    this.add.text(narrow ? pad : width * 0.5 + pad, themesHeaderY, 'Map Themes', {
+    this.add.text(rightX, themesHeaderY, 'Map Themes', {
       fontSize: fontSize(28, width),
       color: '#90caf9',
     });
-    const themeX = narrow ? pad : width * 0.5 + pad;
     MAP_THEMES.forEach((theme, index) => {
       const y = themesStartY + index * rowH;
       const unlocked = save.unlockedThemes.includes(theme.id);
       const selected = save.selectedTheme === theme.id;
       this.createPurchaseButton(
-        themeX,
+        rightX,
+        columnWidth,
         y,
         `${theme.name} (${theme.cost})`,
         selected ? 'SELECTED' : unlocked ? 'USE' : 'BUY',
@@ -82,17 +87,19 @@ export class CustomizeScene extends Phaser.Scene {
 
   private createPurchaseButton(
     x: number,
+    width: number,
     y: number,
     label: string,
     actionLabel: string,
     onClick: () => void,
   ): void {
     const w = this.scale.width;
-    const actionX = Math.min(x + 280, w - 16);
+    const actionWidth = Math.min(130, Math.max(88, Math.floor(width * 0.34)));
+    const actionX = x + width;
     this.add.text(x, y, label, {
       fontSize: fontSize(22, w),
       color: '#ffffff',
-      wordWrap: { width: Math.max(120, actionX - x - 12) },
+      wordWrap: { width: Math.max(110, width - actionWidth - 16) },
     });
     const action = this.add
       .text(actionX, y, `[${actionLabel}]`, {
