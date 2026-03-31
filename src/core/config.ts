@@ -18,9 +18,9 @@ export const DEFAULT_KEYS = {
 
 export const CAR_SKINS = [
   { id: 'classic', name: 'Classic', color: 0x4fc3f7, cost: 0 },
-  { id: 'ember', name: 'Ember', color: 0xff7043, cost: 30 },
-  { id: 'mint', name: 'Mint', color: 0x66bb6a, cost: 60 },
-  { id: 'violet', name: 'Violet', color: 0xab47bc, cost: 90 },
+  { id: 'ember', name: 'Ember', color: 0xff7043, cost: 15 },
+  { id: 'mint', name: 'Mint', color: 0x66bb6a, cost: 30 },
+  { id: 'violet', name: 'Violet', color: 0xab47bc, cost: 45 },
 ] as const;
 
 export const MAP_THEMES = [
@@ -38,7 +38,7 @@ export const MAP_THEMES = [
     bg: 0x041827,
     wall: 0x3f88c5,
     coin: 0xfff176,
-    cost: 40,
+    cost: 20,
   },
   {
     id: 'magmaCave',
@@ -46,7 +46,7 @@ export const MAP_THEMES = [
     bg: 0x1c0906,
     wall: 0x8d3a1f,
     coin: 0xffca28,
-    cost: 80,
+    cost: 40,
   },
 ] as const;
 
