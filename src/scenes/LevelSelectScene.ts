@@ -34,8 +34,11 @@ export class LevelSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const rowH = compact ? 72 : 82;
-    let listY = pad + (compact ? 86 : 92);
+    const listTop = pad + (compact ? 84 : 92);
+    const reservedBottom = pad + 76; // back button + breathing room
+    const available = Math.max(260, height - listTop - reservedBottom);
+    const rowH = Phaser.Math.Clamp(Math.floor(available / LEVELS.length), 40, compact ? 56 : 62);
+    let listY = listTop;
     const worldTexts: Phaser.GameObjects.Text[] = [];
 
     for (let idx = 0; idx < LEVELS.length; idx += 1) {
@@ -53,17 +56,16 @@ export class LevelSelectScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: unlocked });
       const rowText = this.add
         .text(pad + 10, listY, label, {
-          fontSize: fontSize(17, width, 13, 21),
+          fontSize: fontSize(rowH <= 46 ? 15 : 16, width, 12, 20),
           color: unlocked ? '#eceff1' : '#546e7a',
         })
         .setOrigin(0, 0.5);
 
       const worldText = this.add
-        .text(width - pad - 10, listY, unlocked ? 'Top 3:\n…' : '', {
-          fontSize: fontSize(14, width, 11, 17),
+        .text(width - pad - 10, listY, unlocked ? 'Top3: …' : '', {
+          fontSize: fontSize(rowH <= 46 ? 11 : 12, width, 10, 16),
           color: unlocked ? '#b0bec5' : '#546e7a',
           align: 'right',
-          lineSpacing: 2,
         })
         .setOrigin(1, 0.5);
       worldTexts.push(worldText);
@@ -91,23 +93,21 @@ export class LevelSelectScene extends Phaser.Scene {
         const t = worldTexts[idx];
         if (!t) return;
         if (r.error) {
-          t.setText('Top 3:\n(offline)');
+          t.setText('Top3: (offline)');
           return;
         }
         if (r.scores.length === 0) {
-          t.setText('Top 3:\n—');
+          t.setText('Top3: —');
           return;
         }
-        const lines = r.scores.map(
-          (e, i) => `${i + 1}. ${e.name} ${formatLevelTime(e.timeMs / 1000)}`,
+        const parts = r.scores.map(
+          (e, i) => `${i + 1})${e.name} ${formatLevelTime(e.timeMs / 1000)}`,
         );
-        t.setText(lines.join('\n'));
+        t.setText(`Top3: ${parts.join('  ')}`);
       }),
     );
 
-    this.makeButton(width * 0.5, Math.min(height - pad - 28, listY + 36), 'Back', () =>
-      this.scene.start(SCENES.menu),
-    );
+    this.makeButton(width * 0.5, height - pad - 28, 'Back', () => this.scene.start(SCENES.menu));
   }
 
   private makeButton(x: number, y: number, label: string, onClick: () => void): void {
