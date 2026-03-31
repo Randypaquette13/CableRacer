@@ -16,6 +16,18 @@ export type LeaderboardResult = {
   error: string | null;
 };
 
+export type LevelTimeEntry = {
+  name: string;
+  timeMs: number;
+  at: string;
+};
+
+export type LevelTimeResult = {
+  level: number;
+  scores: LevelTimeEntry[];
+  error: string | null;
+};
+
 function normalizeEntry(raw: Partial<LeaderboardEntry>): LeaderboardEntry {
   const distance = Math.floor(Number(raw.distance));
   return {
@@ -89,5 +101,78 @@ export async function submitScore(name: string, distance: number): Promise<Leade
     return { scores: j.scores.map((e) => normalizeEntry(e)), error: null };
   } catch (e) {
     return { scores: [], error: `Save error: ${String(e)}` };
+  }
+}
+
+function normalizeTimeEntry(raw: Partial<LevelTimeEntry>): LevelTimeEntry {
+  const timeMs = Math.floor(Number(raw.timeMs));
+  return {
+    name: String(raw.name ?? ''),
+    timeMs: Number.isFinite(timeMs) ? Math.max(0, timeMs) : 0,
+    at: String(raw.at ?? ''),
+  };
+}
+
+type TimeWithFlag = LevelTimeEntry & { isNew?: boolean };
+
+/** True if this time would appear in the top three (lower is better). */
+export function wouldMakeTopThreeTime(timeMs: number, entries: LevelTimeEntry[]): boolean {
+  const t = Math.floor(Number(timeMs));
+  if (!Number.isFinite(t) || t < 0) {
+    return false;
+  }
+  const combined: TimeWithFlag[] = [
+    ...entries.map((e) => ({ ...e })),
+    { name: '', timeMs: t, at: '', isNew: true },
+  ];
+  combined.sort((a, b) => {
+    if (a.timeMs !== b.timeMs) {
+      return a.timeMs - b.timeMs;
+    }
+    if (a.isNew && !b.isNew) return -1;
+    if (!a.isNew && b.isNew) return 1;
+    return 0;
+  });
+  return combined.slice(0, 3).some((e) => e.isNew === true);
+}
+
+export async function fetchLevelTimes(level: number): Promise<LevelTimeResult> {
+  try {
+    const l = Math.floor(Number(level));
+    const r = await fetch(`${API_BASE}/api/level-times?level=${encodeURIComponent(String(l))}`);
+    if (!r.ok) {
+      return { level: l, scores: [], error: `Server returned ${r.status}` };
+    }
+    const j = (await r.json()) as { level?: number; scores?: LevelTimeEntry[] };
+    if (!Array.isArray(j.scores) || typeof j.level !== 'number') {
+      return { level: l, scores: [], error: 'Bad response: scores missing' };
+    }
+    return { level: j.level, scores: j.scores.map((e) => normalizeTimeEntry(e)), error: null };
+  } catch (e) {
+    const l = Math.floor(Number(level));
+    return { level: l, scores: [], error: `Network error: ${String(e)}` };
+  }
+}
+
+export async function submitLevelTime(name: string, level: number, timeMs: number): Promise<LevelTimeResult> {
+  try {
+    const l = Math.floor(Number(level));
+    const t = Math.floor(Number(timeMs));
+    const r = await fetch(`${API_BASE}/api/level-times`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, level: l, timeMs: t }),
+    });
+    if (!r.ok) {
+      return { level: l, scores: [], error: `Save failed (${r.status})` };
+    }
+    const j = (await r.json()) as { level?: number; scores?: LevelTimeEntry[] };
+    if (!Array.isArray(j.scores) || typeof j.level !== 'number') {
+      return { level: l, scores: [], error: 'Bad response after save' };
+    }
+    return { level: j.level, scores: j.scores.map((e) => normalizeTimeEntry(e)), error: null };
+  } catch (e) {
+    const l = Math.floor(Number(level));
+    return { level: l, scores: [], error: `Save error: ${String(e)}` };
   }
 }

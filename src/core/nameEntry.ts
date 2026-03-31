@@ -50,11 +50,15 @@ export function hideLeaderboardOverlay(): void {
   if (formRow) {
     formRow.hidden = false;
   }
-  setCanvasPointerEvents(true);
+  /**
+   * Prevent “click-through” into Phaser UI: the submit click can land on the canvas if we
+   * re-enable pointer events in the same event turn that hides the overlay.
+   */
+  window.setTimeout(() => setCanvasPointerEvents(true), 0);
 }
 
 /** Name entry after checking (or standalone). Resolves with name string, or null if dismissed. */
-export function promptHighScoreName(): Promise<string | null> {
+export function promptHighScoreName(titleText?: string): Promise<string | null> {
   return new Promise((resolve) => {
     const { overlay, title, checking, formRow, input, submit } = getElements();
     if (!overlay || !title || !checking || !formRow || !input || !submit) {
@@ -63,17 +67,19 @@ export function promptHighScoreName(): Promise<string | null> {
     }
 
     const fromChecking = !checking.hidden;
+    const nextTitle = titleText ?? 'Top 3 score! Enter your name:';
 
     if (!fromChecking) {
       setCanvasPointerEvents(false);
       title.hidden = false;
+      title.textContent = nextTitle;
       checking.hidden = true;
       formRow.hidden = false;
       input.value = '';
       overlay.hidden = false;
     } else {
       title.hidden = false;
-      title.textContent = 'Top 3 score! Enter your name:';
+      title.textContent = nextTitle;
       checking.hidden = true;
       formRow.hidden = false;
     }
@@ -87,7 +93,9 @@ export function promptHighScoreName(): Promise<string | null> {
       resolve(name);
     };
 
-    const onSubmit = () => {
+    const onSubmit = (e?: Event) => {
+      e?.preventDefault();
+      e?.stopPropagation();
       const name = input.value.trim().slice(0, 24) || 'Anonymous';
       finish(name);
     };

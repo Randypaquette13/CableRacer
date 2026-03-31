@@ -8,6 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 /** Railway: mount a volume and set LEADERBOARD_FILE to a path inside it for persistence across deploys. */
 const DATA_FILE = process.env.LEADERBOARD_FILE || path.join(root, 'data', 'leaderboard.json');
+/** Optional separate file for per-level time boards (recommended to place on a volume in prod). */
+const LEVEL_TIMES_FILE = process.env.LEVEL_TIMES_FILE || path.join(root, 'data', 'level-times.json');
 /** If set, PUT /api/leaderboard requires Authorization: Bearer <token> or X-Admin-Token: <token>. */
 const LEADERBOARD_ADMIN_TOKEN = process.env.LEADERBOARD_ADMIN_TOKEN;
 const BASE_PORT = Number(process.env.PORT) || 3001;
@@ -52,10 +54,33 @@ async function writeScores(scores) {
   await fs.writeFile(DATA_FILE, JSON.stringify({ scores }, null, 2), 'utf8');
 }
 
+async function readLevelTimes() {
+  try {
+    const raw = await fs.readFile(LEVEL_TIMES_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    return typeof data === 'object' && data && typeof data.levels === 'object' ? data.levels : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeLevelTimes(levels) {
+  await fs.mkdir(path.dirname(LEVEL_TIMES_FILE), { recursive: true });
+  await fs.writeFile(LEVEL_TIMES_FILE, JSON.stringify({ levels }, null, 2), 'utf8');
+}
+
 /** Higher distance first; on equal distance, newer `at` wins so a fresh submission replaces an old tie. */
 function sortScoresDesc(a, b) {
   if (b.distance !== a.distance) {
     return b.distance - a.distance;
+  }
+  return String(b.at).localeCompare(String(a.at));
+}
+
+/** Lower timeMs first; on equal time, newer `at` wins. */
+function sortTimesAsc(a, b) {
+  if (a.timeMs !== b.timeMs) {
+    return a.timeMs - b.timeMs;
   }
   return String(b.at).localeCompare(String(a.at));
 }
@@ -132,6 +157,51 @@ app.put('/api/leaderboard', async (req, res) => {
     await writeScores(top);
     res.json({ scores: top });
   } catch (e) {
+    res.status(500).json({ error: 'write_failed' });
+  }
+});
+
+app.get('/api/level-times', async (req, res) => {
+  try {
+    const level = Number(req.query?.level);
+    if (!Number.isFinite(level) || level < 1 || level > 999) {
+      res.status(400).json({ error: 'invalid_level' });
+      return;
+    }
+    const levels = await readLevelTimes();
+    const key = String(Math.floor(level));
+    const rows = Array.isArray(levels[key]) ? levels[key] : [];
+    const sorted = [...rows].sort(sortTimesAsc);
+    res.json({ level: Math.floor(level), scores: sorted.slice(0, 3) });
+  } catch {
+    res.status(500).json({ error: 'read_failed' });
+  }
+});
+
+app.post('/api/level-times', async (req, res) => {
+  try {
+    const level = Number(req.body?.level);
+    const timeMs = Number(req.body?.timeMs);
+    if (!Number.isFinite(level) || level < 1 || level > 999) {
+      res.status(400).json({ error: 'invalid_level' });
+      return;
+    }
+    if (!Number.isFinite(timeMs) || timeMs < 0 || timeMs > 3_600_000) {
+      res.status(400).json({ error: 'invalid_time' });
+      return;
+    }
+    const name = sanitizeName(req.body?.name);
+    const at = new Date().toISOString();
+
+    const levels = await readLevelTimes();
+    const key = String(Math.floor(level));
+    const prev = Array.isArray(levels[key]) ? levels[key] : [];
+    const merged = [...prev, { name, timeMs: Math.floor(timeMs), at }];
+    merged.sort(sortTimesAsc);
+    levels[key] = merged.slice(0, 3);
+    await writeLevelTimes(levels);
+    res.json({ level: Math.floor(level), scores: levels[key] });
+  } catch {
     res.status(500).json({ error: 'write_failed' });
   }
 });

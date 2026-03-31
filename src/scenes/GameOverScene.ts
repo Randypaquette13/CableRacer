@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENES } from '../core/config';
+import { SCENES, type GameSceneData } from '../core/config';
 import {
   fetchLeaderboard,
   submitScore,
@@ -162,7 +162,8 @@ export class GameOverScene extends Phaser.Scene {
         return;
       }
       this.scene.stop(SCENES.gameOver);
-      this.scene.start(SCENES.game);
+      const payload: GameSceneData = { mode: 'endless' };
+      this.scene.start(SCENES.game, payload);
     });
     this.createButton(width * 0.5, btnLow, 'Main Menu', () => {
       if (!this.navEnabled) {

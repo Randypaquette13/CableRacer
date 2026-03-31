@@ -5,6 +5,8 @@ import { CustomizeScene } from './scenes/CustomizeScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { GameScene } from './scenes/GameScene';
 import { GameOverScene } from './scenes/GameOverScene';
+import { LevelSelectScene } from './scenes/LevelSelectScene';
+import { LevelResultScene } from './scenes/LevelResultScene';
 import { GAME_HEIGHT, GAME_WIDTH } from './core/config';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -28,7 +30,15 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [MainMenuScene, CustomizeScene, SettingsScene, GameScene, GameOverScene],
+  scene: [
+    MainMenuScene,
+    CustomizeScene,
+    SettingsScene,
+    LevelSelectScene,
+    LevelResultScene,
+    GameScene,
+    GameOverScene,
+  ],
 };
 
 const game = new Phaser.Game(config);

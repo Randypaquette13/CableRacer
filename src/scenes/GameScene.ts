@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { CAR_SKINS, MAP_THEMES, SCENES } from '../core/config';
+import { CAR_SKINS, MAP_THEMES, SCENES, type GameSceneData } from '../core/config';
+import { getLevelByIndex, LEVEL_COUNT, type LevelDefinition } from '../core/levelData';
 import { InputManager } from '../core/InputManager';
 import { ProgressionService } from '../core/ProgressionService';
 import { hidePhoneGameControls, showPhoneGameControls } from '../core/phoneGameControls';
@@ -55,6 +56,9 @@ const STACK_HEIGHT = 340;
 const DIVIDER_THICKNESS = 24;
 const SIDE_WALL_THICKNESS = 12;
 const GATE_WIDTH = 250;
+/** Level mode: speed bump per pad (once each). */
+const PAD_SPEED_BOOST = 70;
+const LEVEL_SPEED_CAP = 660;
 const SKID_SAMPLE_DISTANCE = 6;
 const MAX_SKID_POINTS = 2600;
 
@@ -85,6 +89,19 @@ export class GameScene extends Phaser.Scene {
   private hasSkidSample = false;
   /** Touch-first phones: DOM grapple bar under canvas (see phoneGameControls.ts). */
   private phoneSplit = false;
+  private runMode: 'endless' | 'level' = 'endless';
+  private levelIndex = 0;
+  private levelDef: LevelDefinition | null = null;
+  private maxDividerStack = 1_000_000;
+  private effectiveGateWidth = GATE_WIDTH;
+  private targetX = 0;
+  private targetY = 0;
+  private targetRadiusPx = 44;
+  private levelPadBounds: { left: number; top: number; right: number; bottom: number }[] = [];
+  private padsTriggered: boolean[] = [];
+  /** Axis-aligned level wall slabs (world px). top < bottom in screen Y. */
+  private levelWallBounds: { left: number; top: number; right: number; bottom: number }[] = [];
+  private levelStartTime = 0;
 
   constructor() {
     super(SCENES.game);
@@ -113,6 +130,8 @@ export class GameScene extends Phaser.Scene {
       this.skin = skin;
     }
 
+    this.applySceneRunPayload(this.sys.settings.data as GameSceneData | undefined);
+
     this.cameras.main.setBackgroundColor(this.theme.bg);
     this.matter.world.setGravity(0, 0);
     this.resetRunState();
@@ -120,7 +139,13 @@ export class GameScene extends Phaser.Scene {
     this.caveGraphics = this.add.graphics();
     this.skidGraphics = this.add.graphics();
     this.hookGraphics = this.add.graphics();
+    if (this.runMode === 'level' && this.levelDef) {
+      this.buildLevelDecor();
+    }
     this.car = this.createCarSprite();
+    if (this.runMode === 'level' && this.levelDef) {
+      this.spawnLevelCoins();
+    }
 
     this.cameras.main.stopFollow();
     this.cameras.main.setZoom(1);
@@ -129,16 +154,19 @@ export class GameScene extends Phaser.Scene {
 
     const w = this.scale.width;
     this.hudText = this.add
-      .text(16, 12, 'Distance: 0m  Coins: 0', {
+      .text(16, 12, this.runMode === 'level' ? 'Time: 0.00s  Coins: 0' : 'Distance: 0m  Coins: 0', {
         fontSize: fontSize(26, w),
         color: '#ffffff',
       })
       .setScrollFactor(0);
-    const helpLine = this.phoneSplit
-      ? 'Use the buttons below the game'
-      : isCoarsePointer()
-        ? 'Tap left / right — center releases hook'
-        : 'Mouse: L / R click · Keys · Space: release';
+    const helpLine =
+      this.runMode === 'level'
+        ? 'Reach the target — gates, wall slabs & tight gaps · boost pads add speed'
+        : this.phoneSplit
+          ? 'Use the buttons below the game'
+          : isCoarsePointer()
+            ? 'Tap left / right — center releases hook'
+            : 'Mouse: L / R click · Keys · Space: release';
     this.add
       .text(16, 46, helpLine, {
         fontSize: fontSize(17, w),
@@ -177,6 +205,101 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onPointerDown, this);
     });
+
+    this.levelStartTime = this.time.now;
+  }
+
+  private applySceneRunPayload(data: GameSceneData | undefined): void {
+    this.runMode = 'endless';
+    this.levelIndex = 0;
+    this.levelDef = null;
+    this.maxDividerStack = 1_000_000;
+    this.effectiveGateWidth = GATE_WIDTH;
+    this.levelPadBounds = [];
+    this.padsTriggered = [];
+    this.levelWallBounds = [];
+
+    if (data && data.mode === 'level' && typeof data.levelIndex === 'number') {
+      const idx = Math.max(0, Math.min(LEVEL_COUNT - 1, Math.floor(data.levelIndex)));
+      const def = getLevelByIndex(idx);
+      if (def) {
+        this.runMode = 'level';
+        this.levelIndex = idx;
+        this.levelDef = def;
+        this.maxDividerStack = def.dividerCount;
+        this.effectiveGateWidth = def.gateWidth;
+      }
+    }
+  }
+
+  private buildLevelDecor(): void {
+    const def = this.levelDef;
+    if (!def) {
+      return;
+    }
+    const w = this.scale.width;
+    this.targetX = w * def.targetXRatio;
+    this.targetY = this.startY - def.targetDyFromStart;
+    this.targetRadiusPx = def.targetRadius;
+
+    this.levelPadBounds = def.pads.map((p) => {
+      const cx = w * p.xRatio;
+      const cy = this.startY - p.dyFromStart;
+      const hw = p.w * 0.5;
+      const hh = p.h * 0.5;
+      return { left: cx - hw, right: cx + hw, top: cy - hh, bottom: cy + hh };
+    });
+    this.padsTriggered = this.levelPadBounds.map(() => false);
+
+    this.levelWallBounds = [];
+    for (const wv of def.walls ?? []) {
+      const left = w * wv.xRatioLeft;
+      const right = w * wv.xRatioRight;
+      const top = this.startY - wv.dyTop;
+      const bottom = this.startY - wv.dyBottom;
+      this.levelWallBounds.push({ left, right, top, bottom });
+    }
+
+    const g = this.add.graphics();
+    for (const b of this.levelWallBounds) {
+      g.fillStyle(0x263238, 0.92);
+      g.fillRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+      g.lineStyle(3, 0x90a4ae, 0.85);
+      g.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+    }
+    for (const p of def.pads) {
+      const cx = w * p.xRatio;
+      const cy = this.startY - p.dyFromStart;
+      g.fillStyle(0x00e5ff, 0.45);
+      g.fillRect(cx - p.w * 0.5, cy - p.h * 0.5, p.w, p.h);
+      g.lineStyle(2, 0xffffff, 0.5);
+      g.strokeRect(cx - p.w * 0.5, cy - p.h * 0.5, p.w, p.h);
+    }
+    const tx = this.targetX;
+    const ty = this.targetY;
+    const tr = this.targetRadiusPx;
+    g.lineStyle(4, 0xff5252, 0.95);
+    g.strokeCircle(tx, ty, tr);
+    g.lineStyle(3, 0xffffff, 0.85);
+    g.strokeCircle(tx, ty, tr * 0.55);
+    g.fillStyle(0xff8a80, 0.35);
+    g.fillCircle(tx, ty, tr * 0.35);
+  }
+
+  private spawnLevelCoins(): void {
+    const def = this.levelDef;
+    if (!def) {
+      return;
+    }
+    const w = this.scale.width;
+    for (const c of def.coins) {
+      const x = w * c.xRatio;
+      const y = this.startY - c.dyFromStart;
+      if (this.isInsideCave(x, y, 25)) {
+        const sprite = this.add.circle(x, y, 18, this.theme.coin);
+        this.coins.push({ x, y, sprite });
+      }
+    }
   }
 
   private resetRunState(): void {
@@ -184,8 +307,9 @@ export class GameScene extends Phaser.Scene {
     const marginFromBottom = this.phoneSplit ? 158 : 140;
     const startY = this.scale.height - marginFromBottom;
     this.startY = startY;
+    /** Timed levels: first divider is a centered gate; spawn mid-track heading up (same for every level). */
     this.carPosition.set((this.getPathMinX() + this.getPathMaxX()) * 0.5, startY);
-    this.carHeading = 0;
+    this.carHeading = -Math.PI * 0.5;
     this.speed = BASE_SPEED;
     this.distance = 0;
     this.coinsCollected = 0;
@@ -245,6 +369,9 @@ export class GameScene extends Phaser.Scene {
 
     this.distance += Phaser.Math.Distance.Between(prevX, prevY, this.carPosition.x, this.carPosition.y);
     this.syncCarVisuals();
+    if (this.runMode === 'level') {
+      this.checkLevelBoostPads();
+    }
     this.updateCameraScroll();
     this.updateSkidMarks();
     this.updateDistance();
@@ -254,9 +381,57 @@ export class GameScene extends Phaser.Scene {
     this.renderSkidMarks();
     this.renderHook();
 
+    if (this.runMode === 'level' && this.levelDef && !this.gameEnded) {
+      const distToTarget = Phaser.Math.Distance.Between(
+        this.carPosition.x,
+        this.carPosition.y,
+        this.targetX,
+        this.targetY,
+      );
+      if (distToTarget <= this.targetRadiusPx + CAR_RADIUS - 2) {
+        this.completeLevelWin();
+        return;
+      }
+    }
+
     if (!this.isInsideCave(this.carPosition.x, this.carPosition.y, CAR_RADIUS)) {
       this.endRun();
     }
+  }
+
+  private checkLevelBoostPads(): void {
+    const { x, y } = this.carPosition;
+    for (let i = 0; i < this.levelPadBounds.length; i += 1) {
+      if (this.padsTriggered[i]) {
+        continue;
+      }
+      const b = this.levelPadBounds[i];
+      if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
+        this.speed = Math.min(this.speed + PAD_SPEED_BOOST, LEVEL_SPEED_CAP);
+        this.padsTriggered[i] = true;
+      }
+    }
+  }
+
+  private completeLevelWin(): void {
+    if (this.gameEnded) {
+      return;
+    }
+    this.gameEnded = true;
+    const elapsed = (this.time.now - this.levelStartTime) / 1000;
+    const { newBest } = ProgressionService.recordLevelFinish(
+      this.levelIndex,
+      elapsed,
+      this.coinsCollected,
+      true,
+    );
+    this.scene.start(SCENES.levelResult, {
+      levelIndex: this.levelIndex,
+      timeSec: elapsed,
+      coins: this.coinsCollected,
+      cleared: true,
+      newBest,
+    });
   }
 
   private bindGameplayKeys(): void {
@@ -474,6 +649,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private getEffectiveSpeed(): number {
+    if (this.runMode === 'level') {
+      return this.speed;
+    }
     return this.speed * this.getDistanceSpeedMultiplier();
   }
 
@@ -500,7 +678,24 @@ export class GameScene extends Phaser.Scene {
     if (x < this.getPathMinX() + margin || x > this.getPathMaxX() - margin) {
       return false;
     }
+    if (this.isBlockedByLevelWall(x, y, margin)) {
+      return false;
+    }
     return !this.isBlockedByDivider(x, y, margin);
+  }
+
+  private isBlockedByLevelWall(x: number, y: number, margin: number): boolean {
+    for (const b of this.levelWallBounds) {
+      if (
+        x >= b.left - margin &&
+        x <= b.right + margin &&
+        y >= b.top - margin &&
+        y <= b.bottom + margin
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private findWallAnchor(origin: Phaser.Math.Vector2, dir: Phaser.Math.Vector2): Phaser.Math.Vector2 | null {
@@ -519,10 +714,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateDistance(): void {
+    if (this.runMode === 'level') {
+      const t = (this.time.now - this.levelStartTime) / 1000;
+      this.hudText.setText(`Time: ${t.toFixed(2)}s  Coins: ${this.coinsCollected}`);
+      return;
+    }
     this.hudText.setText(`Distance: ${Math.floor(this.distance)}m  Coins: ${this.coinsCollected}`);
   }
 
   private spawnCoinsAhead(): void {
+    if (this.runMode === 'level') {
+      return;
+    }
     const targetY = this.carPosition.y - 1600;
     while (this.nextCoinY > targetY) {
       const x = Phaser.Math.Between(this.getPathMinX() + 70, this.getPathMaxX() - 70);
@@ -579,7 +782,11 @@ export class GameScene extends Phaser.Scene {
     // Thin stacked divider walls with alternating gates.
     const firstVisible = Math.max(1, Math.floor((this.startY - endY) / STACK_HEIGHT) - 1);
     const lastVisible = Math.floor((this.startY - startY) / STACK_HEIGHT) + 1;
-    for (let stack = firstVisible; stack <= lastVisible; stack += 1) {
+    for (
+      let stack = firstVisible;
+      stack <= lastVisible && stack <= this.maxDividerStack;
+      stack += 1
+    ) {
       const dividerY = this.startY - stack * STACK_HEIGHT;
       const gate = this.getGateRange(stack);
       const top = dividerY - DIVIDER_THICKNESS * 0.5;
@@ -603,7 +810,18 @@ export class GameScene extends Phaser.Scene {
   private getGateRange(stackIndex: number): { start: number; end: number } {
     const minX = this.getPathMinX();
     const maxX = this.getPathMaxX();
-    const width = Math.min(GATE_WIDTH, maxX - minX - 50);
+    let width = Math.min(this.effectiveGateWidth, maxX - minX - 50);
+    if (
+      this.runMode === 'level' &&
+      this.levelDef?.tightStacks?.includes(stackIndex) === true
+    ) {
+      width = Math.max(118, width * 0.72);
+    }
+    if (this.runMode === 'level' && stackIndex === 1) {
+      const mid = (minX + maxX) * 0.5;
+      const half = width * 0.5;
+      return { start: mid - half, end: mid + half };
+    }
     const opensRight = stackIndex % 2 === 1;
     if (opensRight) {
       return { start: maxX - width, end: maxX };
@@ -615,7 +833,7 @@ export class GameScene extends Phaser.Scene {
     const progressUp = this.startY - y;
     const approxStack = Math.round(progressUp / STACK_HEIGHT);
     for (let stack = approxStack - 1; stack <= approxStack + 1; stack += 1) {
-      if (stack < 1) {
+      if (stack < 1 || stack > this.maxDividerStack) {
         continue;
       }
       const dividerY = this.startY - stack * STACK_HEIGHT;
@@ -729,7 +947,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endRun(): void {
+    if (this.gameEnded) {
+      return;
+    }
     this.gameEnded = true;
+    if (this.runMode === 'level') {
+      const elapsed = (this.time.now - this.levelStartTime) / 1000;
+      ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);
+      this.scene.start(SCENES.levelResult, {
+        levelIndex: this.levelIndex,
+        timeSec: elapsed,
+        coins: this.coinsCollected,
+        cleared: false,
+        newBest: false,
+      });
+      return;
+    }
     ProgressionService.addRunResult(Math.floor(this.distance), this.coinsCollected);
     this.scene.start(SCENES.gameOver, {
       distance: this.distance,

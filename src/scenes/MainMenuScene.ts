@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENES } from '../core/config';
+import { SCENES, type GameSceneData } from '../core/config';
 import { fetchLeaderboard, type LeaderboardEntry } from '../core/leaderboardApi';
 import { ProgressionService } from '../core/ProgressionService';
 import { fontSize, menuButtonWidth } from '../core/uiLayout';
@@ -53,15 +53,19 @@ export class MainMenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const btnY0 = compact ? height * 0.44 : height * 0.45;
-    const gap = compact ? height * 0.1 : height * 0.11;
-    this.createButton(width * 0.5, btnY0, 'Play', () => {
-      this.requestFullscreenThen(() => this.scene.start(SCENES.game));
+    const btnY0 = compact ? height * 0.39 : height * 0.4;
+    const gap = compact ? height * 0.072 : height * 0.078;
+    const endlessPayload: GameSceneData = { mode: 'endless' };
+    this.createButton(width * 0.5, btnY0, 'Endless Mode', () => {
+      this.requestFullscreenThen(() => this.scene.start(SCENES.game, endlessPayload));
     });
-    this.createButton(width * 0.5, btnY0 + gap, 'Customize Car / Map', () => {
+    this.createButton(width * 0.5, btnY0 + gap, 'Levels', () => {
+      this.requestFullscreenThen(() => this.scene.start(SCENES.levelSelect));
+    });
+    this.createButton(width * 0.5, btnY0 + gap * 2, 'Customize Car / Map', () => {
       this.requestFullscreenThen(() => this.scene.start(SCENES.customize));
     });
-    this.createButton(width * 0.5, btnY0 + gap * 2, 'Settings', () => {
+    this.createButton(width * 0.5, btnY0 + gap * 3, 'Settings', () => {
       this.requestFullscreenThen(() => this.scene.start(SCENES.settings));
     });
   }

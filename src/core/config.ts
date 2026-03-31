@@ -8,7 +8,14 @@ export const SCENES = {
   gameOver: 'GameOverScene',
   customize: 'CustomizeScene',
   settings: 'SettingsScene',
+  levelSelect: 'LevelSelectScene',
+  levelResult: 'LevelResultScene',
 } as const;
+
+/** Payload for `scene.start(SCENES.game, data)`. */
+export type GameSceneData =
+  | { mode?: 'endless' }
+  | { mode: 'level'; levelIndex: number };
 
 export const DEFAULT_KEYS = {
   hookLeft: 'ArrowLeft',
