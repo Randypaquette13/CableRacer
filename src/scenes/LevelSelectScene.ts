@@ -62,9 +62,9 @@ export class LevelSelectScene extends Phaser.Scene {
         .setOrigin(0, 0.5);
 
       const worldText = this.add
-        .text(width - pad - 10, listY, unlocked ? 'Top3: …' : '', {
+        .text(width - pad - 10, listY, 'Top3: …', {
           fontSize: fontSize(rowH <= 46 ? 11 : 12, width, 10, 16),
-          color: unlocked ? '#b0bec5' : '#546e7a',
+          color: '#b0bec5',
           align: 'right',
         })
         .setOrigin(1, 0.5);
@@ -85,10 +85,6 @@ export class LevelSelectScene extends Phaser.Scene {
     // Fetch top 3 server times per level and display inline.
     void Promise.all(
       LEVELS.map(async (lvl, idx) => {
-        const unlocked = lvl.id <= save.maxUnlockedLevel;
-        if (!unlocked) {
-          return;
-        }
         const r = await fetchLevelTimes(lvl.id);
         const t = worldTexts[idx];
         if (!t) return;
