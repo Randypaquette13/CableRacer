@@ -8,6 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 /** Railway: mount a volume and set LEADERBOARD_FILE to a path inside it for persistence across deploys. */
 const DATA_FILE = process.env.LEADERBOARD_FILE || path.join(root, 'data', 'leaderboard.json');
+/** If set, PUT /api/leaderboard requires Authorization: Bearer <token> or X-Admin-Token: <token>. */
+const LEADERBOARD_ADMIN_TOKEN = process.env.LEADERBOARD_ADMIN_TOKEN;
 const BASE_PORT = Number(process.env.PORT) || 3001;
 /** When PORT is unset (local dev), try next ports if EADDRINUSE. Railway always sets PORT. */
 const TRY_PORT_FALLBACK = process.env.PORT === undefined;
@@ -17,8 +19,8 @@ const app = express();
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
     if (req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;
@@ -58,6 +60,16 @@ function sortScoresDesc(a, b) {
   return String(b.at).localeCompare(String(a.at));
 }
 
+function adminAuthorized(req) {
+  if (!LEADERBOARD_ADMIN_TOKEN) {
+    return true;
+  }
+  const auth = req.headers.authorization;
+  const bearer = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const header = req.headers['x-admin-token'];
+  return bearer === LEADERBOARD_ADMIN_TOKEN || header === LEADERBOARD_ADMIN_TOKEN;
+}
+
 app.get('/api/leaderboard', async (_req, res) => {
   try {
     const scores = await readScores();
@@ -89,6 +101,41 @@ app.post('/api/leaderboard', async (req, res) => {
   }
 });
 
+/** Replace stored leaderboard with up to three entries (sorted by distance descending before save). */
+app.put('/api/leaderboard', async (req, res) => {
+  try {
+    if (!adminAuthorized(req)) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const raw = req.body?.scores;
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > 3) {
+      res.status(400).json({ error: 'scores must be a non-empty array with at most 3 entries' });
+      return;
+    }
+    const now = new Date().toISOString();
+    const parsed = [];
+    for (const row of raw) {
+      const distance = Number(row?.distance);
+      if (!Number.isFinite(distance) || distance < 0 || distance > 1e9) {
+        res.status(400).json({ error: 'invalid_distance', detail: row });
+        return;
+      }
+      const name = sanitizeName(row?.name);
+      const atRaw = row?.at;
+      const at =
+        typeof atRaw === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(atRaw) ? atRaw : now;
+      parsed.push({ name, distance: Math.floor(distance), at });
+    }
+    parsed.sort(sortScoresDesc);
+    const top = parsed.slice(0, 3);
+    await writeScores(top);
+    res.json({ scores: top });
+  } catch (e) {
+    res.status(500).json({ error: 'write_failed' });
+  }
+});
+
 const dist = path.join(root, 'dist');
 app.use(express.static(dist));
 app.get('*', (_req, res) => {
@@ -103,6 +150,9 @@ function onListening() {
   const addr = server.address();
   const p = typeof addr === 'object' && addr ? addr.port : listenPort;
   console.log(`CableRacer server listening on ${p} (data: ${DATA_FILE})`);
+  if (!LEADERBOARD_ADMIN_TOKEN) {
+    console.warn('LEADERBOARD_ADMIN_TOKEN unset — PUT /api/leaderboard has no auth.');
+  }
   if (TRY_PORT_FALLBACK && p !== 3001) {
     console.warn(
       `Vite dev proxy targets port 3001. Either free 3001 and restart, or point vite proxy at http://127.0.0.1:${p}.`,
