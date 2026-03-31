@@ -28,6 +28,7 @@ export const CAR_SKINS = [
   { id: 'ember', name: 'Ember', color: 0xff7043, cost: 15 },
   { id: 'mint', name: 'Mint', color: 0x66bb6a, cost: 30 },
   { id: 'violet', name: 'Violet', color: 0xab47bc, cost: 45 },
+  { id: 'supremeGay', name: 'Supreme Gay', color: 0xffffff, cost: 69 },
 ] as const;
 
 export const MAP_THEMES = [

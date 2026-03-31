@@ -118,6 +118,7 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image('car-ember', 'assets/ember-car.png');
+    this.load.image('car-supreme-gay', 'assets/supreme-gay-car.png');
   }
 
   create(): void {
@@ -337,6 +338,12 @@ export class GameScene extends Phaser.Scene {
       const emberCar = this.add.image(0, 0, 'car-ember').setDisplaySize(92, 50);
       emberCar.rotation = Math.PI;
       car.add(emberCar);
+      return car;
+    }
+    if (this.skin.id === 'supremeGay' && this.textures.exists('car-supreme-gay')) {
+      const faceCar = this.add.image(0, 0, 'car-supreme-gay').setDisplaySize(70, 70);
+      faceCar.rotation = Math.PI * 0.5;
+      car.add(faceCar);
       return car;
     }
 
