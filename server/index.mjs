@@ -215,6 +215,7 @@ app.get('*', (_req, res) => {
 const server = http.createServer(app);
 let listenPort = BASE_PORT;
 const maxPort = TRY_PORT_FALLBACK ? BASE_PORT + 15 : BASE_PORT;
+let shuttingDown = false;
 
 function onListening() {
   const addr = server.address();
@@ -241,5 +242,29 @@ server.on('error', (err) => {
   console.error(err);
   process.exit(1);
 });
+
+function gracefulShutdown(signal) {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  console.log(`Received ${signal}; closing HTTP server...`);
+  server.close((err) => {
+    if (err) {
+      console.error('Error while closing server:', err);
+      process.exit(1);
+      return;
+    }
+    console.log('HTTP server closed cleanly.');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    console.error('Graceful shutdown timed out; forcing exit.');
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 server.listen(listenPort, onListening);
