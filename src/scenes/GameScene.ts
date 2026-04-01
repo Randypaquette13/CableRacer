@@ -65,6 +65,8 @@ const PAD_SPEED_BOOST = 70;
 const LEVEL_SPEED_CAP = 660;
 const SKID_SAMPLE_DISTANCE = 6;
 const MAX_SKID_POINTS = 2600;
+/** Avoid showing 0.01s immediately on level start / retry due to first-frame delay. */
+const LEVEL_TIMER_ZERO_GRACE_MS = 90;
 
 export class GameScene extends Phaser.Scene {
   private car!: Phaser.GameObjects.Container;
@@ -105,7 +107,8 @@ export class GameScene extends Phaser.Scene {
   private padsTriggered: boolean[] = [];
   /** Axis-aligned level wall slabs (world px). top < bottom in screen Y. */
   private levelWallBounds: { left: number; top: number; right: number; bottom: number }[] = [];
-  private levelStartTime = 0;
+  /** Explicit level timer; avoids scene clock drift and always starts from 0 on scene create. */
+  private levelElapsedMs = 0;
 
   constructor() {
     super(SCENES.game);
@@ -211,7 +214,7 @@ export class GameScene extends Phaser.Scene {
       this.input.off('pointerdown', this.onPointerDown, this);
     });
 
-    this.levelStartTime = this.time.now;
+    this.levelElapsedMs = 0;
   }
 
   private applySceneRunPayload(data: GameSceneData | undefined): void {
@@ -322,6 +325,7 @@ export class GameScene extends Phaser.Scene {
     this.coins = [];
     this.nextCoinY = this.carPosition.y - 260;
     this.gameEnded = false;
+    this.levelElapsedMs = 0;
     this.skidLeft = [];
     this.skidRight = [];
     this.hasSkidSample = false;
@@ -366,6 +370,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.processInput();
     const dt = Math.min(delta / 1000, 0.033);
+    if (this.runMode === 'level') {
+      this.levelElapsedMs += delta;
+    }
     this.speed = Math.min(this.speed + ACCEL * dt, MAX_SPEED);
 
     const prevX = this.carPosition.x;
@@ -432,7 +439,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.gameEnded = true;
-    const elapsed = (this.time.now - this.levelStartTime) / 1000;
+    const elapsed = this.levelElapsedMs / 1000;
     const { newBest } = ProgressionService.recordLevelFinish(
       this.levelIndex,
       elapsed,
@@ -729,7 +736,8 @@ export class GameScene extends Phaser.Scene {
 
   private updateDistance(): void {
     if (this.runMode === 'level') {
-      const t = (this.time.now - this.levelStartTime) / 1000;
+      const elapsedMs = this.levelElapsedMs;
+      const t = elapsedMs <= LEVEL_TIMER_ZERO_GRACE_MS ? 0 : elapsedMs / 1000;
       this.hudText.setText(`Time: ${t.toFixed(2)}s  Coins: ${this.coinsCollected}`);
       return;
     }
@@ -966,7 +974,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.gameEnded = true;
     if (this.runMode === 'level') {
-      const elapsed = (this.time.now - this.levelStartTime) / 1000;
+      const elapsed = this.levelElapsedMs / 1000;
       ProgressionService.recordLevelFinish(this.levelIndex, elapsed, this.coinsCollected, false);
       this.scene.start(SCENES.levelResult, {
         levelIndex: this.levelIndex,
