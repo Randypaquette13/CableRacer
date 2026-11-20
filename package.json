@@ -13,7 +13,7 @@
     "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:server:fresh\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "node server/index.mjs"
+    "start": "node --max-semi-space-size=1 server/index.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
@@ -21,7 +21,6 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
-    "express": "^4.21.2",
     "phaser": "^3.90.0"
   }
 }

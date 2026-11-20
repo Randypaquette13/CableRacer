@@ -1,6 +1,6 @@
-import express from 'express';
 import http from 'http';
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,23 +15,6 @@ const LEADERBOARD_ADMIN_TOKEN = process.env.LEADERBOARD_ADMIN_TOKEN;
 const BASE_PORT = Number(process.env.PORT) || 3001;
 /** When PORT is unset (local dev), try next ports if EADDRINUSE. Railway always sets PORT. */
 const TRY_PORT_FALLBACK = process.env.PORT === undefined;
-
-const app = express();
-
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(204);
-      return;
-    }
-  }
-  next();
-});
-
-app.use(express.json({ limit: '16kb' }));
 
 function sanitizeName(raw) {
   const s = String(raw ?? '').trim().slice(0, 24);
@@ -95,47 +78,112 @@ function adminAuthorized(req) {
   return bearer === LEADERBOARD_ADMIN_TOKEN || header === LEADERBOARD_ADMIN_TOKEN;
 }
 
-app.get('/api/leaderboard', async (_req, res) => {
+// --- Minimal HTTP layer on plain node:http (Express added ~14MB of idle RSS for 5 routes) ---
+
+const JSON_BODY_LIMIT = 16 * 1024;
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
+};
+
+function sendJson(res, status, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+class HttpError extends Error {
+  constructor(status, code) {
+    super(code);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** Reads a JSON body like express.json(): non-JSON content types and empty bodies yield undefined. */
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const type = String(req.headers['content-type'] || '');
+    if (!/^application\/(.+\+)?json\b/i.test(type)) {
+      req.resume();
+      resolve(undefined);
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > JSON_BODY_LIMIT) {
+        // Stop buffering but keep the socket alive so the 413 reaches the client (sent with Connection: close).
+        chunks.length = 0;
+        reject(new HttpError(413, 'payload_too_large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (size > JSON_BODY_LIMIT) {
+        return;
+      }
+      if (size === 0) {
+        resolve(undefined);
+        return;
+      }
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        reject(new HttpError(400, 'invalid_json'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function getLeaderboard(_req, res) {
   try {
     const scores = await readScores();
     const sorted = [...scores].sort(sortScoresDesc);
-    const top = sorted.slice(0, 3);
-    res.json({ scores: top });
-  } catch (e) {
-    res.status(500).json({ error: 'read_failed' });
+    sendJson(res, 200, { scores: sorted.slice(0, 3) });
+  } catch {
+    sendJson(res, 500, { error: 'read_failed' });
   }
-});
+}
 
-app.post('/api/leaderboard', async (req, res) => {
+async function postLeaderboard(_req, res, body) {
   try {
-    const distance = Number(req.body?.distance);
+    const distance = Number(body?.distance);
     if (!Number.isFinite(distance) || distance < 0 || distance > 1e9) {
-      res.status(400).json({ error: 'invalid_distance' });
+      sendJson(res, 400, { error: 'invalid_distance' });
       return;
     }
-    const name = sanitizeName(req.body?.name);
+    const name = sanitizeName(body?.name);
     const at = new Date().toISOString();
     const scores = await readScores();
     const merged = [...scores, { name, distance: Math.floor(distance), at }];
     merged.sort(sortScoresDesc);
     const top = merged.slice(0, 3);
     await writeScores(top);
-    res.json({ scores: top });
-  } catch (e) {
-    res.status(500).json({ error: 'write_failed' });
+    sendJson(res, 200, { scores: top });
+  } catch {
+    sendJson(res, 500, { error: 'write_failed' });
   }
-});
+}
 
 /** Replace stored leaderboard with up to three entries (sorted by distance descending before save). */
-app.put('/api/leaderboard', async (req, res) => {
+async function putLeaderboard(req, res, body) {
   try {
     if (!adminAuthorized(req)) {
-      res.status(401).json({ error: 'unauthorized' });
+      sendJson(res, 401, { error: 'unauthorized' });
       return;
     }
-    const raw = req.body?.scores;
+    const raw = body?.scores;
     if (!Array.isArray(raw) || raw.length === 0 || raw.length > 3) {
-      res.status(400).json({ error: 'scores must be a non-empty array with at most 3 entries' });
+      sendJson(res, 400, { error: 'scores must be a non-empty array with at most 3 entries' });
       return;
     }
     const now = new Date().toISOString();
@@ -143,7 +191,7 @@ app.put('/api/leaderboard', async (req, res) => {
     for (const row of raw) {
       const distance = Number(row?.distance);
       if (!Number.isFinite(distance) || distance < 0 || distance > 1e9) {
-        res.status(400).json({ error: 'invalid_distance', detail: row });
+        sendJson(res, 400, { error: 'invalid_distance', detail: row });
         return;
       }
       const name = sanitizeName(row?.name);
@@ -155,42 +203,42 @@ app.put('/api/leaderboard', async (req, res) => {
     parsed.sort(sortScoresDesc);
     const top = parsed.slice(0, 3);
     await writeScores(top);
-    res.json({ scores: top });
-  } catch (e) {
-    res.status(500).json({ error: 'write_failed' });
+    sendJson(res, 200, { scores: top });
+  } catch {
+    sendJson(res, 500, { error: 'write_failed' });
   }
-});
+}
 
-app.get('/api/level-times', async (req, res) => {
+async function getLevelTimes(_req, res, _body, url) {
   try {
-    const level = Number(req.query?.level);
+    const level = Number(url.searchParams.get('level') ?? undefined);
     if (!Number.isFinite(level) || level < 1 || level > 999) {
-      res.status(400).json({ error: 'invalid_level' });
+      sendJson(res, 400, { error: 'invalid_level' });
       return;
     }
     const levels = await readLevelTimes();
     const key = String(Math.floor(level));
     const rows = Array.isArray(levels[key]) ? levels[key] : [];
     const sorted = [...rows].sort(sortTimesAsc);
-    res.json({ level: Math.floor(level), scores: sorted.slice(0, 3) });
+    sendJson(res, 200, { level: Math.floor(level), scores: sorted.slice(0, 3) });
   } catch {
-    res.status(500).json({ error: 'read_failed' });
+    sendJson(res, 500, { error: 'read_failed' });
   }
-});
+}
 
-app.post('/api/level-times', async (req, res) => {
+async function postLevelTimes(_req, res, body) {
   try {
-    const level = Number(req.body?.level);
-    const timeMs = Number(req.body?.timeMs);
+    const level = Number(body?.level);
+    const timeMs = Number(body?.timeMs);
     if (!Number.isFinite(level) || level < 1 || level > 999) {
-      res.status(400).json({ error: 'invalid_level' });
+      sendJson(res, 400, { error: 'invalid_level' });
       return;
     }
     if (!Number.isFinite(timeMs) || timeMs < 0 || timeMs > 3_600_000) {
-      res.status(400).json({ error: 'invalid_time' });
+      sendJson(res, 400, { error: 'invalid_time' });
       return;
     }
-    const name = sanitizeName(req.body?.name);
+    const name = sanitizeName(body?.name);
     const at = new Date().toISOString();
 
     const levels = await readLevelTimes();
@@ -200,19 +248,155 @@ app.post('/api/level-times', async (req, res) => {
     merged.sort(sortTimesAsc);
     levels[key] = merged.slice(0, 3);
     await writeLevelTimes(levels);
-    res.json({ level: Math.floor(level), scores: levels[key] });
+    sendJson(res, 200, { level: Math.floor(level), scores: levels[key] });
   } catch {
-    res.status(500).json({ error: 'write_failed' });
+    sendJson(res, 500, { error: 'write_failed' });
   }
-});
+}
+
+const API_ROUTES = {
+  '/api/leaderboard': { GET: getLeaderboard, POST: postLeaderboard, PUT: putLeaderboard },
+  '/api/level-times': { GET: getLevelTimes, POST: postLevelTimes },
+};
+
+// --- Static files (built client in dist/, SPA fallback to index.html) ---
 
 const dist = path.join(root, 'dist');
-app.use(express.static(dist));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(dist, 'index.html'));
-});
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.txt': 'text/plain; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
+};
 
-const server = http.createServer(app);
+async function statFile(filePath) {
+  try {
+    const st = await fs.stat(filePath);
+    return st.isFile() ? st : null;
+  } catch {
+    return null;
+  }
+}
+
+async function serveStatic(req, res, pathname) {
+  let rel;
+  try {
+    rel = decodeURIComponent(pathname);
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  let filePath = path.join(dist, path.normalize(rel));
+  if (filePath !== dist && !filePath.startsWith(dist + path.sep)) {
+    res.writeHead(403).end();
+    return;
+  }
+  let st = await statFile(filePath);
+  if (!st) {
+    // Directory index, then SPA fallback (same as the old app.get('*') → index.html).
+    const dirIndex = path.join(filePath, 'index.html');
+    st = await statFile(dirIndex);
+    filePath = st ? dirIndex : path.join(dist, 'index.html');
+    st = st || (await statFile(filePath));
+    if (!st) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not found');
+      return;
+    }
+  }
+
+  const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+  const isHtml = path.extname(filePath).toLowerCase() === '.html';
+  const headers = {
+    'Content-Type': MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+    'Last-Modified': st.mtime.toUTCString(),
+    ETag: etag,
+    // Vite fingerprints dist/assets/*, so those can be cached for good; HTML must revalidate.
+    'Cache-Control':
+      !isHtml && pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'public, max-age=0',
+  };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, headers).end();
+    return;
+  }
+  headers['Content-Length'] = st.size;
+  res.writeHead(200, headers);
+  if (req.method === 'HEAD') {
+    res.end();
+    return;
+  }
+  const stream = createReadStream(filePath);
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
+
+async function handleRequest(req, res) {
+  let url;
+  try {
+    url = new URL(req.url || '/', 'http://localhost');
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  const { pathname } = url;
+  const method = req.method || 'GET';
+
+  try {
+    if (pathname.startsWith('/api')) {
+      for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
+      if (method === 'OPTIONS') {
+        res.writeHead(204).end();
+        return;
+      }
+      const route = API_ROUTES[pathname.replace(/\/+$/, '')];
+      const handler = route?.[method] ?? (method === 'HEAD' ? route?.GET : undefined);
+      if (!handler) {
+        sendJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      const body = method === 'POST' || method === 'PUT' ? await readJsonBody(req) : undefined;
+      await handler(req, res, body, url);
+      return;
+    }
+
+    if (method !== 'GET' && method !== 'HEAD') {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not found');
+      return;
+    }
+    await serveStatic(req, res, pathname);
+  } catch (e) {
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    if (e instanceof HttpError) {
+      res.setHeader('Connection', 'close');
+      sendJson(res, e.status, { error: e.code });
+      return;
+    }
+    console.error(e);
+    sendJson(res, 500, { error: 'internal_error' });
+  }
+}
+
+const server = http.createServer(handleRequest);
 let listenPort = BASE_PORT;
 const maxPort = TRY_PORT_FALLBACK ? BASE_PORT + 15 : BASE_PORT;
 let shuttingDown = false;

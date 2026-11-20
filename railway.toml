@@ -2,4 +2,5 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm start"
+# Run node directly: `npm start` keeps an extra npm (Node) process resident and adds ~40MB.
+startCommand = "node --max-semi-space-size=1 server/index.mjs"
