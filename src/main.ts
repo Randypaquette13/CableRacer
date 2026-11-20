@@ -11,6 +11,8 @@ import { GAME_HEIGHT, GAME_WIDTH } from './core/config';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
+  /** Right-click is gameplay; keep the OS menu off the canvas in every scene (e.g. after game over). */
+  disableContextMenu: true,
   parent: 'game-mount',
   /** Fixed 16:9; Scale.FIT letterboxes on phones so layout matches desktop proportions. */
   width: GAME_WIDTH,

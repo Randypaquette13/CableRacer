@@ -184,7 +184,6 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0);
 
     this.bindGameplayKeys();
-    this.input.mouse?.disableContextMenu();
     document.body.style.cursor = 'none';
     this.input.off('pointerdown', this.onPointerDown, this);
     this.input.on('pointerdown', this.onPointerDown, this);
